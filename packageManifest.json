@@ -10,7 +10,7 @@
       "id": "89c8f6f8-2bd1-40aa-b762-0bfe4e810a65",
       "name": "UPBeat App",
       "namespace": "UPBeat",
-      "location": "https://raw.githubusercontent Upping/UPBeat-Hubitat/main/apps/UPBeat_App.groovy",
+      "location": "https://raw.githubusercontent.com/UPBeat-Automation/UPBeat-Hubitat/main/apps/UPBeat_App.groovy",
       "required": true,
       "oauth": true,
       "primary": true
