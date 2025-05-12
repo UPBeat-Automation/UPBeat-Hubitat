@@ -1,0 +1,6 @@
+{
+  "name": "UPBeat Hubitat UPB Package",
+  "category": "Control",
+  "location": "https://raw.githubusercontent.com/UPBeat-Automation/UPBeat-Hubitat/main/packageManifest.json",
+  "description": "Hubitat drivers and libraries for Universal Powerline Bus (UPB) devices, including switches, dimmers, scenes."
+}
