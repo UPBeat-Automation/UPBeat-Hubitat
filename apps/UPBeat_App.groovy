@@ -383,7 +383,6 @@ private String makeUri(String extraPath) {
 String getHubUrl() {
     def localIP = location.hub.localIP
     def hubUrl = "https://${localIP}"
-    logDebug "Hub URL: ${hubUrl}"
     return hubUrl
 }
 
