@@ -19,19 +19,19 @@ library (
 @Field static final int LOG_DEFAULT_LEVEL = 0
 
 void logError(message) {
-    if (logLevel.toInteger()>=1) log.error message
+    if (logLevel?.toInteger()>=1) log.error message
 }
 void logWarn(message) {
-    if (logLevel.toInteger()>=2) log.warn message
+    if (logLevel?.toInteger()>=2) log.warn message
 }
 void logInfo(message) {
-    if (logLevel.toInteger()>=3) log.info message
+    if (logLevel?.toInteger()>=3) log.info message
 }
 void logDebug(message) {
-    if (logLevel.toInteger()>=4) log.debug message
+    if (logLevel?.toInteger()>=4) log.debug message
 }
 void logTrace(message) {
-    if (logLevel.toInteger()>=5) log.trace message
+    if (logLevel?.toInteger()>=5) log.trace message
 }
 
 
