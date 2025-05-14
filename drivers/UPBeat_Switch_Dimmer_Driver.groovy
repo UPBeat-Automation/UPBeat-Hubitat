@@ -135,6 +135,7 @@ def updated() {
                 logMessage += "Slot ${slot}: Unused\n"
             }
         }
+        state.clear()
         logDebug logMessage
     } catch (Exception e) {
         logWarn "Failed to parse receive links: ${e.message}. Please check the format (linkID:level:rate, rate optional)."
