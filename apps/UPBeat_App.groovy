@@ -617,9 +617,10 @@ byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer so
     return (pim_bytes)
 }
 
-byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Integer channel) {
+byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Integer duration, Integer channel) {
     logDebug "buildGotoCommand()"
     logDebug "Device ID: ${deviceId}"
+    logDebug "Duration: ${duration}"
     logDebug "Level: ${level}"
     logDebug "Channel: ${channel}"
 
@@ -631,6 +632,10 @@ byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Inte
     if (level < 0 || level > 100) {
         logError "Level ${level} is out of range (0-100)"
         throw new IllegalArgumentException("Level must be between 0 and 100")
+    }
+    if (duration < 0 || duration > 255) {
+        logError "Duration ${duration} is out of range (0-255)"
+        throw new IllegalArgumentException("Duration must be between 0 and 255")
     }
     if (channel < 0 || channel > 255) {
         logError "Channel ${channel} is out of range (0-255)"
@@ -648,7 +653,7 @@ byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Inte
     packet.write(0xFF) // Source ID (PIM)
     packet.write(0x22) // MDID (Goto)
     packet.write(level) // Level
-    packet.write(0xFF) // Rate
+    packet.write(duration) // Rate
     packet.write(channel) // Channel
 
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
