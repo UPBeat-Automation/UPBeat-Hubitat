@@ -15,15 +15,53 @@ import java.util.UUID
 #include UPBeat.UPBeatLogger
 #include UPBeat.UPBeatLib
 
+@Field static Map DEVICE_TYPES = [
+        "non_dimming_switch": [
+                displayName: "UPB Non-Dimming Switch",
+                driverName: "UPB Non-Dimming Switch",
+                category: "device",
+                requiredInputs: [
+                        [name: "deviceId", type: "number", title: "Device ID", range: "1..250", required: true],
+                        [name: "channelId", type: "number", title: "Channel ID", range: "0..255", defaultValue: 1, required: true]
+                ]
+        ],
+        "dimming_switch": [
+                displayName: "UPB Dimming Switch",
+                driverName: "UPB Dimming Switch",
+                category: "device",
+                requiredInputs: [
+                        [name: "deviceId", type: "number", title: "Device ID", range: "1..250", required: true],
+                        [name: "channelId", type: "number", title: "Channel ID", range: "0..255", defaultValue: 1, required: true]
+                ]
+        ],
+        "scene_switch": [
+                displayName: "UPB Scene Switch",
+                driverName: "UPB Scene Switch",
+                category: "scene",
+                requiredInputs: [
+                        [name: "linkId", type: "number", title: "Link ID", range: "1..250", required: true]
+                ]
+        ],
+        "scene_actuator": [
+                displayName: "UPB Scene Actuator",
+                driverName: "UPB Scene Actuator",
+                category: "scene",
+                requiredInputs: [
+                        [name: "linkId", type: "number", title: "Link ID", range: "1..250", required: true]
+                ]
+        ]
+]
+
 definition(
-    name: "UPBeat App",
-    namespace: "UPBeat",
-    author: "UPBeat Automation",
-    description: "Configure Hubitat for UPB Support",
-    category: "Convenience",
-    iconUrl: "",
-    iconX2Url: "",
-    iconX3Url: ""
+        name: "UPBeat App",
+        namespace: "UPBeat",
+        author: "UPBeat Automation",
+        description: "Configure Hubitat for UPB Support",
+        category: "Convenience",
+        iconUrl: "",
+        iconX2Url: "",
+        iconX3Url: "",
+        singleInstance: true
 )
 
 preferences {
@@ -35,22 +73,22 @@ preferences {
 mappings {
     path("/status") {
         action: [
-            GET: "handleStatus"
+                GET: "handleStatus"
         ]
     }
     path("/device") {
         action: [
-            POST: "handleAddDevice"
+                POST: "handleAddDevice"
         ]
     }
     path("/scene") {
         action: [
-            POST: "handleAddScene"
+                POST: "handleAddScene"
         ]
     }
     path("/pim") {
         action: [
-            POST: "handleUpdatePowerlineInterface"
+                POST: "handleUpdatePowerlineInterface"
         ]
     }
 }
@@ -59,18 +97,21 @@ mappings {
  * Custom Application Configuration Pages
  ***************************************************************************/
 def addDevicePage() {
-    dynamicPage(name: "addDevicePage", title: "Manually Add Device", install: false, uninstall: false, nextPage: "createDevice") { 
+    dynamicPage(name: "addDevicePage", title: "Manually Add Device", install: false, uninstall: false, nextPage: "createDevice") {
         section("Create a New Device") {
-            input name: "deviceType", type: "enum", title: "Device Type", options: ["UPB Non-Dimming Switch", "UPB Dimming Switch", "UPB Scene Switch", "UPB Scene Actuator"], required: true, submitOnChange: true
-            if (settings.deviceType) {
+            // Generate enum options for deviceType
+            def deviceTypeOptions = DEVICE_TYPES.collectEntries { key, config -> [(key): config.displayName] }
+            input name: "deviceType", type: "enum", title: "Device Type", options: deviceTypeOptions, required: true, submitOnChange: true
+
+            if (settings.deviceType && DEVICE_TYPES[settings.deviceType]) {
+                // Common inputs for all device types
                 input name: "deviceName", type: "text", title: "Device Name", required: true, submitOnChange: true
                 input name: "voiceName", type: "text", title: "Voice Name", required: false, submitOnChange: true
                 input name: "networkId", type: "number", title: "Network ID", required: true, range: "0..255", submitOnChange: true
-                if (settings.deviceType != "UPB Scene Switch" && settings.deviceType != "UPB Scene Actuator") {
-                    input name: "deviceId", type: "number", title: "Device ID", required: true, range: "1..250", submitOnChange: true
-                    input name: "channelId", type: "number", title: "Channel ID", required: true, range: "0..255", defaultValue: 1, submitOnChange: true
-                } else {
-                    input name: "linkId", type: "number", title: "Link ID", required: true, range: "1..250", submitOnChange: true
+
+                // Dynamically render inputs based on device type
+                DEVICE_TYPES[settings.deviceType].requiredInputs.each { inputConfig ->
+                    input(inputConfig + [submitOnChange: true])
                 }
             }
         }
@@ -79,8 +120,8 @@ def addDevicePage() {
 
 def createDevice() {
     logTrace("createDevice")
-    
-    // Validate inputs based on device type
+
+    // Validate common inputs
     if (!settings.deviceType || !settings.deviceName || !settings.networkId) {
         return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
             section("Error") {
@@ -88,27 +129,29 @@ def createDevice() {
             }
         }
     }
-    if (settings.deviceType != "UPB Scene Switch" && settings.deviceType != "UPB Scene Actuator") {
-        if (!settings.deviceId || !settings.channelId) {
-            return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
-                section("Error") {
-                    paragraph "Device ID and Channel ID are required for ${settings.deviceType} devices."
-                }
-            }
-        }
-    } else {
-        if (!settings.linkId) {
-            return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
-                section("Error") {
-                    paragraph "Link ID is required for UPB Scene devices."
-                }
+
+    // Validate device-type-specific inputs
+    def deviceConfig = DEVICE_TYPES[settings.deviceType]
+    if (!deviceConfig) {
+        return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
+            section("Error") {
+                paragraph "Invalid Device Type selected."
             }
         }
     }
 
-    // Generate deviceNetworkId based on device type
+    def missingInputs = deviceConfig.requiredInputs.findAll { inputConfig -> !settings[inputConfig.name] }
+    if (missingInputs) {
+        return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
+            section("Error") {
+                paragraph "Missing required inputs: ${missingInputs.collect { it.title }.join(', ')}."
+            }
+        }
+    }
+
+    // Generate deviceNetworkId based on device category
     def deviceNetworkId
-    if (settings.deviceType == "UPB Scene Switch" || settings.deviceType == "UPB Scene Actuator") {
+    if (deviceConfig.category == "scene") {
         deviceNetworkId = buildSceneNetworkId(settings.networkId.intValue(), settings.linkId.intValue())
     } else {
         deviceNetworkId = buildDeviceNetworkId(settings.networkId.intValue(), settings.deviceId.intValue(), settings.channelId.intValue())
@@ -119,7 +162,7 @@ def createDevice() {
     if (existingDevice) {
         return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
             section("Error") {
-                paragraph "A device with Network ID ${settings.networkId}, Device/Link ID ${settings.deviceType == 'UPB Scene Switch' || settings.deviceType == "UPB Scene Actuator" ? settings.linkId : settings.deviceId}, and Channel ID ${settings.channelId ?: 'N/A'} already exists."
+                paragraph "A device with Network ID ${settings.networkId}, ${deviceConfig.category == 'scene' ? 'Link ID' : 'Device ID'} ${settings[deviceConfig.category == 'scene' ? 'linkId' : 'deviceId']}, and Channel ID ${settings.channelId ?: 'N/A'} already exists."
             }
         }
     }
@@ -127,7 +170,7 @@ def createDevice() {
     // Create the device
     def childDevice
     try {
-        childDevice = addChildDevice("UPBeat", settings.deviceType, deviceNetworkId, [name: settings.deviceName, label: settings.voiceName ?: settings.deviceName])
+        childDevice = addChildDevice("UPBeat", deviceConfig.driverName, deviceNetworkId, [name: settings.deviceName, label: settings.voiceName ?: settings.deviceName])
     } catch (Exception e) {
         logError "Failed to create device: ${e.message}"
         return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
@@ -137,12 +180,11 @@ def createDevice() {
         }
     }
 
-    // Configure the device based on type
-    if (settings.deviceType == 'UPB Scene Switch' || settings.deviceType == "UPB Scene Actuator") {
-        childDevice.updateNetworkId(settings.networkId.intValue())
+    // Configure the device based on category
+    childDevice.updateNetworkId(settings.networkId.intValue())
+    if (deviceConfig.category == "scene") {
         childDevice.updateLinkId(settings.linkId.intValue())
     } else {
-        childDevice.updateNetworkId(settings.networkId.intValue())
         childDevice.updateDeviceId(settings.deviceId.intValue())
         childDevice.updateChannelId(settings.channelId.intValue())
     }
@@ -162,14 +204,12 @@ def createDevice() {
     def deviceId = createdDevice.id
     def devicePageUrl = "/device/edit/${deviceId}"
 
-    // Clear the form settings
+    // Clear all settings
     app.removeSetting("deviceName")
-    app.removeSetting("voiceName")        
+    app.removeSetting("voiceName")
     app.removeSetting("networkId")
-    app.removeSetting("deviceId")
-    app.removeSetting("channelId")
     app.removeSetting("deviceType")
-    app.removeSetting("linkId")
+    deviceConfig.requiredInputs.each { app.removeSetting(it.name) }
 
     // Display a confirmation page with a link to the device page
     return dynamicPage(name: "createDevice", title: "Device Created Successfully", nextPage: "mainPage") {
@@ -221,14 +261,17 @@ def mainPage() {
             input name: "enableConfig", type: "bool", title: "Enable Remote Configuration", defaultValue: false, submitOnChange: true
         }
         section("Devices") {
-            href(name: "manualAddHref", title: "Manually Add Device", page: "addDevicePage", description: "Add a device manually")
+            if (app.getInstallationState() == "COMPLETE") {
+                href(name: "manualAddHref", title: "Manually Add Device", page: "addDevicePage", description: "Add a device manually")
+            } else {
+                paragraph "Please save the app by clicking 'Done' before adding devices."
+            }
         }
         section("Troubleshooting") {
             input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
         }
     }
 }
-
 /***************************************************************************
  * Global Static Data
  ***************************************************************************/
@@ -264,12 +307,12 @@ def getPimDevice()
     logTrace "getPimDevice()"
 
     def pim = getChildDevice(pimDeviceId)
- 
+
     if (pim == null) {
         logDebug "Creating PIM device"
         pim = addChildDevice("UPBeat", "UPB Powerline Interface Module", pimDeviceId, [name: "UPB Powerline Interface Module"])
     }
-    
+
     return pim
 }
 
@@ -307,7 +350,7 @@ def updateDeviceId(device, String newDeviceNetworkId) {
 
 void appButtonHandler(button) {
     switch(button) {
-        case "addDeviceBtn":  
+        case "addDeviceBtn":
             logTrace("createDevice")
             // Validate inputs based on device type
             if (!settings.deviceType || !settings.deviceName || !settings.networkId) {
@@ -362,7 +405,7 @@ void appButtonHandler(button) {
 
             // Clear the form settings
             app.removeSetting("deviceName")
-            app.removeSetting("voiceName")        
+            app.removeSetting("voiceName")
             app.removeSetting("networkId")
             app.removeSetting("deviceId")
             app.removeSetting("channelId")
@@ -388,9 +431,9 @@ String getHubUrl() {
 
 void updatePIMDevice(String ipAddress, int portNumber) {
     logTrace "updatePIMDevice()"
-    def pim = getPimDevice() 
+    def pim = getPimDevice()
     // Set the device IP
-    device.updateSetting("ipAddress", [value: ipAddress, type: "text"]) 
+    device.updateSetting("ipAddress", [value: ipAddress, type: "text"])
     device.updateSetting("portNumber", [value: portNumber, type: "number"])
     device.updated()
 }
@@ -426,7 +469,7 @@ void handleStatus() {
     logTrace "handleStatus()"
 
     def data = [
-        message: "UPBeat is alive an well."
+            message: "UPBeat is alive an well."
     ]
 
     // Using JsonBuilder to convert the data map to a JSON string
@@ -445,13 +488,13 @@ void handleAddDevice() {
     if ('DeviceInfo' in postData) {
         def result = addDevice(postData['DeviceInfo'])
         def data = [
-            message: result
+                message: result
         ]
         def json = new JsonBuilder(data).toPrettyString()
         render contentType: "application/json", data: json, status: 200
     } else {
         def data = [
-            error: "Invalid data received."
+                error: "Invalid data received."
         ]
         def json = new JsonBuilder(data).toPrettyString()
         render contentType: "application/json", data: json, status: 400
@@ -467,13 +510,13 @@ void handleAddScene() {
 
     if ('LinkInfo' in postData) {
         def data = [
-            message: "Data received successfully."
+                message: "Data received successfully."
         ]
         def json = new JsonBuilder(data).toPrettyString()
         render contentType: "application/json", data: json, status: 200
     } else {
         def data = [
-            error: "Invalid data received."
+                error: "Invalid data received."
         ]
         def json = new JsonBuilder(data).toPrettyString()
         render contentType: "application/json", data: json, status: 400
@@ -491,13 +534,13 @@ void handleUpdatePowerlineInterface() {
         updatePIMDevice(postData['PowerlineInterfaceInfo']['IpAddress'], postData['PowerlineInterfaceInfo']['PortNumber'])
 
         def data = [
-            message: "PIM Updated to ${postData['PowerlineInterfaceInfo']['IpAddress']}:${postData['PowerlineInterfaceInfo']['PortNumber']}"
+                message: "PIM Updated to ${postData['PowerlineInterfaceInfo']['IpAddress']}:${postData['PowerlineInterfaceInfo']['PortNumber']}"
         ]
         def json = new JsonBuilder(data).toPrettyString()
         render contentType: "application/json", data: json, status: 200
     } else {
         def data = [
-            error: "Invalid data received."
+                error: "Invalid data received."
         ]
         def json = new JsonBuilder(data).toPrettyString()
         render contentType: "application/json", data: json, status: 400
@@ -672,26 +715,26 @@ void addDevice(deviceInfo) {
     deviceInfo['ChannelInfo'].each { channelInfo ->
         // Generate a unique device id based on UPBeat / UPStart Data
         deviceNetworkId = buildDeviceNetworkId(deviceInfo.NetworkId, deviceInfo.ModuleId, channelInfo.ChannelId)
-        
+
         if (channelInfo.Enabled) {
             deviceFullName = "${deviceInfo.RoomName} ${deviceInfo.DeviceName}${(channelInfo.ChannelId == 0) ? '' : channelInfo.ChannelId}"
             if (channelInfo.VoiceName.isEmpty())
                 channelInfo.VoiceName = deviceFullName
-            
+
             device = getChildDevice(deviceNetworkId)
-            
+
             if (device == null) {
                 if (channelInfo.DimEnabled == 1)
                     addChildDevice("UPBeat", "UPB Dimming Switch", deviceNetworkId, [label: channelInfo.VoiceName, name: deviceFullName, moduleInfo: deviceInfo])
                 else
                     addChildDevice("UPBeat", "UPB Non-Dimming Switch", deviceNetworkId, [label: channelInfo.VoiceName, name: deviceFullName, moduleInfo: deviceInfo])
-                
+
                 device = getChildDevice(deviceNetworkId)
 
                 // Let's request the device state in the future
                 device.sendEvent(name: "switch", value: "off", isStateChange: false)
                 skipEvent = true
-                
+
             } else {
                 logInfo "Device ${deviceNetworkId} already exists"
             }
@@ -738,7 +781,7 @@ def handlePimDeviceState(evt) {
     try {
         // Broadcast packet needs to be routed to the device
         if(eventData.destinationId == 0)
-        	device.handleDeviceState(eventData.level, eventData.networkId, eventData.destinationId, eventData.sourceId, eventData.args)
+            device.handleDeviceState(eventData.level, eventData.networkId, eventData.destinationId, eventData.sourceId, eventData.args)
         else
             device.handleDeviceState(eventData.level, eventData.networkId, eventData.sourceId, eventData.destinationId, eventData.args)
         logDebug "Dispatched handleDeviceState to ${device.typeName}"
