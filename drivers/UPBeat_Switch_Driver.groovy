@@ -12,9 +12,9 @@ import groovy.json.JsonOutput
 
 metadata {
     definition(name: "UPB Non-Dimming Switch", namespace: "UPBeat", author: "UPBeat Automation", importUrl: "") {
-		capability "Switch"
-		capability "Refresh"
-		command "receiveScene", ["string"] // Command to process scene data (Link ID)
+        capability "Switch"
+        capability "Refresh"
+        command "receiveScene", ["string"] // Command to process scene data (Link ID)
     }
 }
 
@@ -24,21 +24,21 @@ preferences {
     input name: "deviceId", type: "number", title: "Device ID", required: true, range: "0..255"
     input name: "channelId", type: "number", title: "Channel ID", required: true, range: "0..255"
     input name: "receiveComponent1", type: "text", title: "Receive Component 1"
-	input name: "receiveComponent2", type: "text", title: "Receive Component 2"
-	input name: "receiveComponent3", type: "text", title: "Receive Component 3"
-	input name: "receiveComponent4", type: "text", title: "Receive Component 4"
-	input name: "receiveComponent5", type: "text", title: "Receive Component 5"
-	input name: "receiveComponent6", type: "text", title: "Receive Component 6"
-	input name: "receiveComponent7", type: "text", title: "Receive Component 7"
-	input name: "receiveComponent8", type: "text", title: "Receive Component 8"
-	input name: "receiveComponent9", type: "text", title: "Receive Component 9"
-	input name: "receiveComponent10", type: "text", title: "Receive Component 10"
-	input name: "receiveComponent11", type: "text", title: "Receive Component 11"
-	input name: "receiveComponent12", type: "text", title: "Receive Component 12"
-	input name: "receiveComponent13", type: "text", title: "Receive Component 13"
-	input name: "receiveComponent14", type: "text", title: "Receive Component 14"
-	input name: "receiveComponent15", type: "text", title: "Receive Component 15"
-	input name: "receiveComponent16", type: "text", title: "Receive Component 16"
+    input name: "receiveComponent2", type: "text", title: "Receive Component 2"
+    input name: "receiveComponent3", type: "text", title: "Receive Component 3"
+    input name: "receiveComponent4", type: "text", title: "Receive Component 4"
+    input name: "receiveComponent5", type: "text", title: "Receive Component 5"
+    input name: "receiveComponent6", type: "text", title: "Receive Component 6"
+    input name: "receiveComponent7", type: "text", title: "Receive Component 7"
+    input name: "receiveComponent8", type: "text", title: "Receive Component 8"
+    input name: "receiveComponent9", type: "text", title: "Receive Component 9"
+    input name: "receiveComponent10", type: "text", title: "Receive Component 10"
+    input name: "receiveComponent11", type: "text", title: "Receive Component 11"
+    input name: "receiveComponent12", type: "text", title: "Receive Component 12"
+    input name: "receiveComponent13", type: "text", title: "Receive Component 13"
+    input name: "receiveComponent14", type: "text", title: "Receive Component 14"
+    input name: "receiveComponent15", type: "text", title: "Receive Component 15"
+    input name: "receiveComponent16", type: "text", title: "Receive Component 16"
 }
 
 /***************************************************************************
@@ -52,7 +52,7 @@ void installed() {
 
 def updated() {
     logTrace "updated()"
-    
+
     // Process UPB receive link slots
     def components = [:] // Maps Link ID to action (level, rate, slot)
     def errors = []
@@ -109,9 +109,9 @@ def updated() {
 
                 // Store the component for lookup
                 components[linkIdKey] = [
-                    level: level,
-                    rate: rate,
-                    slot: slot.toString() // Store the slot number for reference
+                        level: level,
+                        rate: rate,
+                        slot: slot.toString() // Store the slot number for reference
                 ]
             }
         }
@@ -124,7 +124,7 @@ def updated() {
 
         // Store the components in data (serialized as JSON)
         device.updateDataValue("receiveComponents", JsonOutput.toJson(components))
-        
+
         // Log the configuration in a table-like format
         def logMessage = "Stored UPB receive links for ${device.deviceNetworkId}:\n"
         (1..16).each { slot ->
@@ -169,7 +169,7 @@ def updateChannelId(Long channelId) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def refresh() {
-     logDebug "Executing 'refresh'"
+    logDebug "Executing 'refresh'"
 
     try {
         byte[] data = parent.buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
@@ -204,7 +204,7 @@ def flash(BigDecimal rateToFlash) {
 def on() {
     logDebug "Sending ON to device [${settings.deviceId}]"
     try {
-        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, settings.channelId.intValue())
+        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
 
         if (parent.sendPimMessage(data)) {
@@ -222,7 +222,7 @@ def off() {
     logDebug "Sending OFF to device [${settings.deviceId}]"
 
     try {
-        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, settings.channelId.intValue())
+        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
 
         if (parent.sendPimMessage(data)) {
@@ -241,7 +241,7 @@ def off() {
  ***************************************************************************/
 def receiveScene(String linkId) {
     logDebug "Received UPB scene command for ${device.deviceNetworkId}: Link ID ${linkId}"
-    
+
     // Retrieve and deserialize the receiveComponents map from data
     def receiveComponents = [:]
     def jsonData = device.getDataValue("receiveComponents")
