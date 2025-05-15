@@ -277,7 +277,7 @@ def setLevel(value, duration = null) {
 
     try {
         def rate = duration != null ? duration.intValue() : (settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255)
-        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), value.intValue(), duration.intValue(), settings.channelId.intValue())
+        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), value.intValue(), rate, settings.channelId.intValue())
         logDebug "UPB Command Goto level [${data}]"
 
         if (parent.sendPimMessage(data)) {
