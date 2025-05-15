@@ -703,13 +703,13 @@ def updateDeviceSettings(device, settings) {
                 logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId or linkId."
                 return [success: false, error: "Missing networkId or linkId"]
             }
-            newDeviceNetworkId = buildSceneNetworkId(settings.networkId, settings.linkId)
+            newDeviceNetworkId = buildSceneNetworkId(settings.networkId.intValue(), settings.linkId.intValue())
         } else {
             if (!settings.networkId || !settings.deviceId || !settings.channelId) {
                 logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId, deviceId, or channelId."
                 return [success: false, error: "Missing networkId, deviceId, or channelId"]
             }
-            newDeviceNetworkId = buildDeviceNetworkId(settings.networkId, settings.deviceId, settings.channelId)
+            newDeviceNetworkId = buildDeviceNetworkId(settings.networkId.intValue(), settings.deviceId.intValue(), settings.channelId.intValue())
         }
         if (newDeviceNetworkId != device.deviceNetworkId) {
             def existingDevice = getChildDevice(newDeviceNetworkId)
