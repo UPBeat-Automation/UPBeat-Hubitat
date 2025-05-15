@@ -7,6 +7,7 @@
 */
 #include UPBeat.UPBeatLogger
 #include UPBeat.UPBeatLib
+import groovy.transform.Field
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -24,6 +25,7 @@ preferences {
     input name: "networkId", type: "number", title: "Network ID", required: true, range: "0..255"
     input name: "deviceId", type: "number", title: "Device ID", required: true, range: "0..255"
     input name: "channelId", type: "number", title: "Channel ID", required: true, range: "0..255"
+    input name: "fadeRate", type: "enum", title: "Default Fade Rate", options: FADE_RATE_MAPPING.keySet(), defaultValue: "Default", required: false
     input name: "receiveComponent1", type: "text", title: "Receive Component 1"
     input name: "receiveComponent2", type: "text", title: "Receive Component 2"
     input name: "receiveComponent3", type: "text", title: "Receive Component 3"
@@ -42,11 +44,38 @@ preferences {
     input name: "receiveComponent16", type: "text", title: "Receive Component 16"
 }
 
+@Field static Map FADE_RATE_MAPPING = [
+        "Snap": 0,  // Instant
+        "0.3s": 1,  // 0.3 seconds
+        "0.5s": 2,  // 0.5 seconds
+        "1s": 3,    // 1 second
+        "2s": 4,    // 2 seconds
+        "5s": 5,    // 5 seconds
+        "10s": 6,   // 10 seconds
+        "20s": 7,   // 20 seconds
+        "30s": 8,   // 30 seconds
+        "40s": 9,   // 40 seconds
+        "60s": 10,  // 1 minute
+        "90s": 11,  // 1.5 minutes
+        "2min": 12, // 2 minutes
+        "5min": 13, // 5 minutes
+        "30min": 14,// 30 minutes
+        "1hr": 15,  // 1 hour
+        "Default": 255 // Device programmed default
+]
+
 /***************************************************************************
  * Core Driver Functions
  ***************************************************************************/
 void installed() {
     logTrace "installed()"
+    logDebug "Installing UPB Dimming Switch"
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        log.error "UPB Dimming Switch must be created by the UPBeat App. Manual creation is not supported."
+        sendEvent(name: "status", value: "error", descriptionText: "Device must be created via UPBeat App", isStateChange: true)
+        return
+    }
     // Initialize state.receiveComponents to ensure it's not null
     device.updateDataValue("receiveComponents", JsonOutput.toJson([:]))
 }
@@ -135,18 +164,21 @@ def updated() {
                 logMessage += "Slot ${slot}: Unused\n"
             }
         }
-        state.clear()
         logDebug logMessage
     } catch (Exception e) {
         logWarn "Failed to parse receive links: ${e.message}. Please check the format (linkID:level:rate, rate optional)."
         throw new Exception("Failed to update receive links: ${e.message}. Check the logs for details.")
     }
+    def result = parent.updateDeviceSettings(device, settings)
+    if (result.success) {
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } else {
+        log.error "Failed to update device: ${result.error}"
+        sendEvent(name: "status", value: "error", descriptionText: result.error, isStateChange: true)
+    }
+    // If switch driver is changed, clear the states.
+    state.clear()
 }
-
-def parse(String description) {
-    logTrace "parse(${description})"
-}
-
 /***************************************************************************
  * Handlers for Driver Data
  ***************************************************************************/
@@ -204,7 +236,8 @@ def flash(BigDecimal rateToFlash) {
 def on() {
     logDebug "Sending ON to device [${settings.deviceId}]"
     try {
-        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, 0, settings.channelId.intValue())
+        def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
+        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, rate, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
 
         if (parent.sendPimMessage(data)) {
@@ -223,7 +256,8 @@ def off() {
     logDebug "Sending OFF to device [${settings.deviceId}]"
 
     try {
-        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, settings.channelId.intValue())
+        def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
+        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, rate, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
 
         if (parent.sendPimMessage(data)) {
@@ -242,6 +276,7 @@ def setLevel(value, duration = null) {
     logDebug "Sending Set-Percent to device [${settings.deviceId}] at rate [${duration}]"
 
     try {
+        def rate = duration != null ? duration.intValue() : (settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255)
         byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), value.intValue(), duration.intValue(), settings.channelId.intValue())
         logDebug "UPB Command Goto level [${data}]"
 
@@ -252,7 +287,7 @@ def setLevel(value, duration = null) {
             } else {
                 sendEvent(name: "switch", value: "off", isStateChange: false)
             }
-            sendEvent(name: "level", value: value, isStateChange: true)
+            sendEvent(name: "level", value: value, unit: "%", isStateChange: true)
         } else {
             logDebug "Failed to issue command [${data}]"
         }
