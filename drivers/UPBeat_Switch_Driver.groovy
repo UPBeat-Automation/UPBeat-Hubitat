@@ -1,6 +1,6 @@
 /*
 * Hubitat Driver: UPB Non-Dimming Switch
-* Description: Univeral Powerline Bus Non-Dimming Switch Driver
+* Description: Universal Powerline Bus Non-Dimming Switch Driver
 * Copyright: 2025 UPBeat Automation
 * Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
 * Author: UPBeat Automation
@@ -46,13 +46,25 @@ preferences {
  ***************************************************************************/
 void installed() {
     logTrace "installed()"
-    // Initialize data.receiveComponents to ensure it's not null
+    logDebug "Installing UPB Non-Dimming Switch"
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        log.error "UPB Non-Dimming Switch must be created by the UPBeat App. Manual creation is not supported."
+        sendEvent(name: "status", value: "error", descriptionText: "Device must be created via UPBeat App", isStateChange: true)
+        return
+    }
+    // Initialize state.receiveComponents to ensure it's not null
     device.updateDataValue("receiveComponents", JsonOutput.toJson([:]))
 }
 
 def updated() {
     logTrace "updated()"
-
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        log.error "UPB Non-Dimming Switch must be created by the UPBeat App."
+        sendEvent(name: "status", value: "error", descriptionText: "Device must be created via UPBeat App", isStateChange: true)
+        return
+    }
     // Process UPB receive link slots
     def components = [:] // Maps Link ID to action (level, rate, slot)
     def errors = []
@@ -121,10 +133,8 @@ def updated() {
             errors.each { error -> logWarn error }
             throw new Exception("Invalid receive link configuration. Check the logs for details.")
         }
-
         // Store the components in data (serialized as JSON)
         device.updateDataValue("receiveComponents", JsonOutput.toJson(components))
-
         // Log the configuration in a table-like format
         def logMessage = "Stored UPB receive links for ${device.deviceNetworkId}:\n"
         (1..16).each { slot ->
@@ -136,12 +146,20 @@ def updated() {
                 logMessage += "Slot ${slot}: Unused\n"
             }
         }
-        state.clear()
         logDebug logMessage
     } catch (Exception e) {
         logWarn "Failed to parse receive links: ${e.message}. Please check the format (linkID:level:rate, rate optional)."
         throw new Exception("Failed to update receive links: ${e.message}. Check the logs for details.")
     }
+    def result = parentApp.updateDeviceSettings(device, settings)
+    if (result.success) {
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } else {
+        log.error "Failed to update device: ${result.error}"
+        sendEvent(name: "status", value: "error", descriptionText: result.error, isStateChange: true)
+    }
+    // If switch driver is changed, clear the states
+    state.clear()
 }
 
 def parse(String description) {
@@ -170,13 +188,17 @@ def updateChannelId(Long channelId) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def refresh() {
-    logDebug "Executing 'refresh'"
-
+    logDebug "refresh()"
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        log.error "No parent UPBeat App."
+        sendEvent(name: "status", value: "error", descriptionText: "No parent UPBeat App", isStateChange: true)
+        return
+    }
     try {
-        byte[] data = parent.buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
+        byte[] data = parentApp.buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
         logDebug "UPB Device State Request Command [${data}]"
-
-        if (parent.sendPimMessage(data)) {
+        if (parentApp.sendPimMessage(data)) {
             logDebug "Device State Request successfully sent [${data}]"
         } else {
             logDebug "Failed to issue Device State Request command [${data}]"
@@ -188,15 +210,17 @@ def refresh() {
 
 def flash(BigDecimal rateToFlash) {
     logDebug "Flash Rate [${rateToFlash}]"
-
-    byte[] data = parent.blinkCommand(settings.networkId.intValue(), settings.deviceId.intValue(), rateToFlash, settings.channelId.intValue())
-
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        log.error "No parent UPBeat App."
+        sendEvent(name: "status", value: "error", descriptionText: "No parent UPBeat App", isStateChange: true)
+        return
+    }
+    byte[] data = parentApp.blinkCommand(settings.networkId.intValue(), settings.deviceId.intValue(), rateToFlash, settings.channelId.intValue())
     logDebug "UPB Flash Command[${data}]"
-
-    if (parent.sendPimMessage(data)) {
+    if (parentApp.sendPimMessage(data)) {
         logDebug "UPB Flash [${data}]"
         sendEvent(name: "switch", value: "on", isStateChange: true)
-        sendEvent(name: "level", value: 100, isStateChange: true)
     } else {
         logDebug "Failed to issue command [${data}]"
     }
@@ -204,11 +228,17 @@ def flash(BigDecimal rateToFlash) {
 
 def on() {
     logDebug "Sending ON to device [${settings.deviceId}]"
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        log.error "No parent UPBeat App."
+        sendEvent(name: "status", value: "error", descriptionText: "No parent UPBeat App", isStateChange: true)
+        return
+    }
     try {
-        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, 0, settings.channelId.intValue())
+        logDebug "Sending ON to device [${settings.deviceId}]"
+        byte[] data = parentApp.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
-
-        if (parent.sendPimMessage(data)) {
+        if (parentApp.sendPimMessage(data)) {
             logDebug "Command successfully sent [${data}]"
             sendEvent(name: "switch", value: "on", isStateChange: true)
         } else {
@@ -221,12 +251,17 @@ def on() {
 
 def off() {
     logDebug "Sending OFF to device [${settings.deviceId}]"
-
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        log.error "No parent UPBeat App."
+        sendEvent(name: "status", value: "error", descriptionText: "No parent UPBeat App", isStateChange: true)
+        return
+    }
     try {
-        byte[] data = parent.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, settings.channelId.intValue())
+        logDebug "Sending OFF to device [${settings.deviceId}]"
+        byte[] data = parentApp.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
-
-        if (parent.sendPimMessage(data)) {
+        if (parentApp.sendPimMessage(data)) {
             logDebug "Command successfully sent [${data}]"
             sendEvent(name: "switch", value: "off", isStateChange: true)
         } else {
@@ -259,7 +294,6 @@ def receiveScene(String linkId) {
         def rate = component.rate
         def slot = component.slot
         logDebug "Executing action for Link ID ${linkId} (Slot ${slot}) on ${device.deviceNetworkId}: Level=${level}, Rate=${rate}"
-
         if (level == 0) {
             sendEvent(name: "switch", value: "off")
         } else {
@@ -274,7 +308,7 @@ def receiveScene(String linkId) {
 }
 
 def handleDeviceState(int level, int networkId, int sourceId, int destinationId, List args) {
-    logTrace "handleDeviceState(level=${level}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${args}"
+    logTrace "handleDeviceState(level=${level}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${args})"
     if (settings.networkId != networkId || settings.deviceId != destinationId) {
         logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
         return
