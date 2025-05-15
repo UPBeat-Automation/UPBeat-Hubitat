@@ -78,7 +78,7 @@ metadata {
 //0x32 – 0x3F // Reserved for future use
 
 // Core Report Set
-@Field static final byte UPB_ACK_RESPONSE = 0x80 
+@Field static final byte UPB_ACK_RESPONSE = 0x80
 //0x81 – 0x84 //Unused
 @Field static final byte UPB_SETUP_TIME = 0x85
 @Field static final byte UPB_DEVICE_STATE = 0x86
@@ -127,7 +127,7 @@ def initialize(){
 }
 
 /***************************************************************************
- * Web Socket User Defined 
+ * Web Socket User Defined
  ***************************************************************************/
 def socketStatus(message) {
     logTrace "socketStatus()"
@@ -158,26 +158,26 @@ def parse(hexMessage) {
         logError "[${hexMessage}]: Invalid data"
         return
     }
-    
+
     // Show converted and parsed type
     def asciiMessage = new String(messageBytes)
     logDebug "[${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)}]: [${asciiMessage}] (Converted)"
-    
+
     // Parse message type from original bytes
     byte[] messageTypeBytes = messageBytes[0..1]
     String messageType = new String(messageTypeBytes)
-    
+
     logDebug "[${asciiMessage}]: Type=[${messageType}]"
-    
+
     byte[] messageData = new byte[0]
-    
+
     if (messageBytes.size() > 2) {
         messageData = messageBytes[2..-1]
         String messageDataString = new String(messageData)
         messageData = hubitat.helper.HexUtils.hexStringToByteArray(messageDataString)
         logDebug "[${asciiMessage}]: Data=${messageDataString}"
     }
-    
+
     switch (messageType) {
         case "PA":
             deviceResponses.put(device.deviceNetworkId, 'PA')
@@ -188,7 +188,7 @@ def parse(hexMessage) {
             logError "pim_error_message"
             break
         case "PB":
-            deviceResponses.put(device.deviceNetworkId, 'PB')    
+            deviceResponses.put(device.deviceNetworkId, 'PB')
             logWarn "pim_busy_message"
             break
         case "PK":
@@ -426,13 +426,13 @@ def parseMessageReport(byte[] data) {
 
     byte messageDataId = messageContent[0]
     logDebug "[${messageDataString}]: MDID=${String.format('0x%02X', messageDataId)}"
-   
+
     byte messageSetId = (messageDataId >> 5) & 0x07
     byte messageIdByte = messageDataId & 0x1F
     byte[] messageArgs = messageContent[1..-1]
     def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
     logDebug "[${messageDataString}]: MDA=${argsHex}"
-    
+
     switch(messageSetId) {
         case UPB_CORE_COMMAND:
             logDebug "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
@@ -521,7 +521,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
             break
         default:
-            logError "Handling ${getMdidName(messageSetId)} ${String.format('0x%02X', messageSetId)}"
+            logError "Handling ${getMdidName(messageDataId)} ${String.format('0x%02X', messageDataId)}"
             break
     }
 }
@@ -582,7 +582,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
             break
         default:
-            logError "Handling ${getMdidName(messageSetId)} ${String.format('0x%02X', messageSetId)}"
+            logError "Handling ${getMdidName(messageDataId)} ${String.format('0x%02X', messageDataId)}"
             break
     }
 }
@@ -633,7 +633,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
             break
         default:
-            logError "Handling ${getMdidName(messageSetId)} ${String.format('0x%02X', messageSetId)}"
+            logError "Handling ${getMdidName(messageDataId)} ${String.format('0x%02X', messageDataId)}"
             break
     }
 }
