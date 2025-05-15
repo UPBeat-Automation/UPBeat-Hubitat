@@ -88,7 +88,11 @@ def updated() {
         sendEvent(name: "status", value: "error", descriptionText: "Device must be created via UPBeat App", isStateChange: true)
         return
     }
-
+    // Validate fadeRate
+    if (settings.fadeRate && !(settings.fadeRate in FADE_RATE_MAPPING.keySet())) {
+        logWarn "Invalid fade rate: ${settings.fadeRate}. Using device default."
+        device.updateSetting("fadeRate", [value: "Default", type: "string"])
+    }
     // Process UPB receive link slots
     def components = [:] // Maps Link ID to action (level, rate, slot)
     def errors = []
@@ -257,6 +261,7 @@ def on() {
     }
     try {
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
+        logDebug "Sending ON to device [${settings.deviceId}] at rate [${rate}]"
         byte[] data = parentApp.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, rate, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
         if (parentApp.sendPimMessage(data)) {
@@ -281,6 +286,7 @@ def off() {
     }
     try {
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
+        logDebug "Sending OFF to device [${settings.deviceId}] at rate [${rate}]"
         byte[] data = parentApp.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, rate, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
         if (parentApp.sendPimMessage(data)) {
@@ -310,6 +316,7 @@ def setLevel(value, duration = null) {
             logWarn "Provided duration ${duration} is out of range (0-15 or 255). Using default fade rate."
             rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
         }
+        logDebug "Sending Set-Percent to device [${settings.deviceId}] at rate [${rate}] (duration=${duration})"
         byte[] data = parentApp.buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), value.intValue(), rate, settings.channelId.intValue())
         logDebug "UPB Command Goto level [${data}]"
         if (parentApp.sendPimMessage(data)) {
