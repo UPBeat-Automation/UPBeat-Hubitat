@@ -316,38 +316,6 @@ def getPimDevice()
     return pim
 }
 
-/*
-def updateDeviceId(device, String newDeviceNetworkId) {
-    try {
-        def childDevice = getChildDevice(newDeviceNetworkId)
-        if (!childDevice) {
-            logError "Child device with network ID ${childDeviceNetworkId} not found"
-            return false
-        }
-
-        def newDeviceNetworkId = childDevice.deriveNetworkId()
-
-        if (!newDeviceNetworkId || newDeviceNetworkId.trim() == "") {
-            logError "Derived Network ID is invalid for ${childDevice.displayName}"
-            return false
-        }
-
-        def conflict = getChildDevice(newDeviceNetworkId)
-        if (!conflict) {
-            childDevice.deviceNetworkId = newDeviceNetworkId
-            logDebug "Device ID for ${childDevice.displayName} updated to ${newDeviceNetworkId}"
-        } else {
-            logError "Device ID ${conflict.displayName} conflicts with ${newDeviceNetworkId} (requested by ${childDeviceNetworkId})"
-            return false
-        }
-    } catch (Exception e) {
-        logError "An error occurred while updating the device ID for ${childDeviceNetworkId}: ${e.message}"
-        return false
-    }
-    return true
-}
-*/
-
 void appButtonHandler(button) {
     switch(button) {
         case "addDeviceBtn":
@@ -716,6 +684,50 @@ byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
 /***************************************************************************
  * Custom App Functions
  ***************************************************************************/
+def updateDeviceSettings(device, settings) {
+    logTrace "updateDeviceSettings(${device.deviceNetworkId})"
+    if (!settings) {
+        logError "Cannot update device ${device.deviceNetworkId}: Settings are null."
+        return [success: false, error: "Settings are null"]
+    }
+    try {
+        // Update deviceNetworkId
+        def deviceConfig = DEVICE_TYPES.find { it.value.driverName == device.typeName }?.value
+        if (!deviceConfig) {
+            logError "Cannot update device ${device.deviceNetworkId}: Unknown device type."
+            return [success: false, error: "Unknown device type"]
+        }
+        def newDeviceNetworkId
+        if (deviceConfig.category == "scene") {
+            if (!settings.networkId || !settings.linkId) {
+                logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId or linkId."
+                return [success: false, error: "Missing networkId or linkId"]
+            }
+            newDeviceNetworkId = buildSceneNetworkId(settings.networkId, settings.linkId)
+        } else {
+            if (!settings.networkId || !settings.deviceId || !settings.channelId) {
+                logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId, deviceId, or channelId."
+                return [success: false, error: "Missing networkId, deviceId, or channelId"]
+            }
+            newDeviceNetworkId = buildDeviceNetworkId(settings.networkId, settings.deviceId, settings.channelId)
+        }
+        if (newDeviceNetworkId != device.deviceNetworkId) {
+            def existingDevice = getChildDevice(newDeviceNetworkId)
+            if (existingDevice && existingDevice.id != device.id) {
+                logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: ${newDeviceNetworkId} conflicts with existing device."
+                return [success: false, error: "Device ID conflict: ${newDeviceNetworkId} is already in use"]
+            }
+            device.deviceNetworkId = newDeviceNetworkId
+            logDebug "Updated deviceNetworkId to ${newDeviceNetworkId} for ${device.deviceNetworkId}"
+        }
+        logDebug "Updated device ${device.deviceNetworkId} settings"
+        return [success: true, error: null]
+    } catch (Exception e) {
+        logError "Failed to update device ${device.deviceNetworkId}: ${e.message}"
+        return [success: false, error: "Failed to update device: ${e.message}"]
+    }
+}
+
 void addDevice(deviceInfo) {
     deviceInfo['ChannelInfo'].each { channelInfo ->
         // Generate a unique device id based on UPBeat / UPStart Data
