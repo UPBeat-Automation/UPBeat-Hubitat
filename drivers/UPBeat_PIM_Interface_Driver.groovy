@@ -15,15 +15,16 @@ metadata {
         capability "Initialize"
         attribute "Network", "string"
         attribute "PIM", "string"
+        attribute "status", "enum", ["ok", "error"] // Added to track device state
     }
 
     preferences {
+        input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
         input name: "ipAddress", type: "text", title: "IP Address", description: "IP Address of Serial to Network Device", required: true
         input name: "portNumber", type: "number", title: "Port", description: "Port of Serial to Network Device", required: true, range: 0..65535
         input name: "maxRetry", type: "number", title: "Retries", description: "Number of retries for PIM busy messages", required: true, range: 1..60, defaultValue: 10
         input name: "maxProcessingTime", type: "number", title: "Timeout", description: "Timeout for messages being sent", required: true, range: 0..60000, defaultValue: 10000
         input name: "reconnectInterval", type: "number", title: "Reconnect", description: "Reconnect Interval", required: true, range: 0..60000, defaultValue: 60
-        input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
     }
 }
 
@@ -90,40 +91,80 @@ metadata {
 @Field static final byte UPB_RAW_DATA = 0x92
 @Field static final byte UPB_HEARTBEAT = 0x93
 //0x94 – 0x9F // Unused
+
+/***************************************************************************
+ * Helper Functions
+ ***************************************************************************/
+private void isCorrectParent() {
+    def parentApp = getParent()
+    if (!parentApp || parentApp.name != "UPBeat App") {
+        throw new IllegalStateException("${device.name ?: 'Device'} must be created by the UPBeat App. Manual creation is not supported.")
+    }
+}
+
 /***************************************************************************
  * Core Driver Functions
  ***************************************************************************/
 def installed() {
     logTrace "installed()"
+    try {
+        isCorrectParent()
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
+    }
 }
 
 def uninstalled() {
     logTrace "uninstalled()"
-    closeSocket()
-    logInfo "Removing ${device.deviceNetworkId} mutex"
-    deviceMutexes.remove(device.deviceNetworkId)
-    logInfo "Removing ${device.deviceNetworkId} response buffer"
-    deviceResponses.remove(device.deviceNetworkId)
+    try {
+        isCorrectParent()
+        closeSocket()
+        logInfo "Removing ${device.deviceNetworkId} mutex"
+        deviceMutexes.remove(device.deviceNetworkId)
+        logInfo "Removing ${device.deviceNetworkId} response buffer"
+        deviceResponses.remove(device.deviceNetworkId)
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
+    }
 }
 
 def updated() {
     logTrace "updated()"
-    initialize()
+    try {
+        isCorrectParent()
+        initialize()
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
+    }
 }
 
-def initialize(){
+def initialize() {
     logTrace "initialize()"
-    logInfo "DNI: ${device.deviceNetworkId}"
-    logInfo "Host: ${ipAddress}:${portNumber}"
-    logInfo "maxRetry: ${maxRetry}"
-    logInfo "maxProcessingTime: ${maxProcessingTime}"
-    logInfo "reconnectInterval: ${reconnectInterval}"
-    logInfo "LogLevel: [${LOG_LEVELS[logLevel.toInteger()]}]"
-    deviceMutexes.put(device.deviceNetworkId, new Object())
-    deviceResponses.put(device.deviceNetworkId, new String())
-    closeSocket()
-    openSocket()
-    setPIMCommandMode()
+    try {
+        isCorrectParent()
+        logInfo "DNI: ${device.deviceNetworkId}"
+        logInfo "Host: ${ipAddress}:${portNumber}"
+        logInfo "maxRetry: ${maxRetry}"
+        logInfo "maxProcessingTime: ${maxProcessingTime}"
+        logInfo "reconnectInterval: ${reconnectInterval}"
+        logInfo "LogLevel: [${LOG_LEVELS[logLevel.toInteger()]}]"
+        deviceMutexes.put(device.deviceNetworkId, new Object())
+        deviceResponses.put(device.deviceNetworkId, new String())
+        closeSocket()
+        openSocket()
+        setPIMCommandMode()
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
+    }
 }
 
 /***************************************************************************
@@ -131,114 +172,131 @@ def initialize(){
  ***************************************************************************/
 def socketStatus(message) {
     logTrace "socketStatus()"
-    logDebug "Message: ${message}"
-    if (message.contains('error: Stream closed') || message.contains('error: Connection timed out') || message.contains("receive error: Connection reset")) {
-        logError "socketStatus(): ${message}"
-        closeSocket()
-        runIn(reconnectInterval, reconnectSocket)
+    try {
+        isCorrectParent()
+        logDebug "Message: ${message}"
+        if (message.contains('error: Stream closed') || message.contains('error: Connection timed out') || message.contains("receive error: Connection reset")) {
+            logError "socketStatus(): ${message}"
+            closeSocket()
+            runIn(reconnectInterval, reconnectSocket)
+        }
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
     }
-    return
 }
 
 def parse(hexMessage) {
     logTrace "parse()"
-    logDebug "Message Received: [${hexMessage}]"
+    try {
+        isCorrectParent()
+        logDebug "Message Received: [${hexMessage}]"
 
-    byte[] messageBytes = hubitat.helper.HexUtils.hexStringToByteArray(hexMessage)
+        byte[] messageBytes = hubitat.helper.HexUtils.hexStringToByteArray(hexMessage)
 
-    // Strip EOL character, should be present always
-    if (messageBytes.size() > 0 && messageBytes[messageBytes.length - 1] == 0x0D) {
-        messageBytes = messageBytes[0..-2]
-        logDebug("[${hexMessage}]: ${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)} (EOL Removed)")
-    } else {
-        logError "[${hexMessage}]: No EOL found"
-    }
+        // Strip EOL character, should be present always
+        if (messageBytes.size() > 0 && messageBytes[messageBytes.length - 1] == 0x0D) {
+            messageBytes = messageBytes[0..-2]
+            logDebug("[${hexMessage}]: ${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)} (EOL Removed)")
+        } else {
+            logError "[${hexMessage}]: No EOL found"
+        }
 
-    if (messageBytes.size() < 2) {
-        logError "[${hexMessage}]: Invalid data"
+        if (messageBytes.size() < 2) {
+            logError "[${hexMessage}]: Invalid data"
+            return
+        }
+
+        // Show converted and parsed type
+        def asciiMessage = new String(messageBytes)
+        logDebug "[${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)}]: [${asciiMessage}] (Converted)"
+
+        // Parse message type from original bytes
+        byte[] messageTypeBytes = messageBytes[0..1]
+        String messageType = new String(messageTypeBytes)
+
+        logDebug "[${asciiMessage}]: Type=[${messageType}]"
+
+        byte[] messageData = new byte[0]
+
+        if (messageBytes.size() > 2) {
+            messageData = messageBytes[2..-1]
+            String messageDataString = new String(messageData)
+            messageData = hubitat.helper.HexUtils.hexStringToByteArray(messageDataString)
+            logDebug "[${asciiMessage}]: Data=${messageDataString}"
+        }
+
+        switch (messageType) {
+            case "PA":
+                deviceResponses.put(device.deviceNetworkId, 'PA')
+                logDebug "pim_accept_message"
+                break
+            case "PE":
+                deviceResponses.put(device.deviceNetworkId, 'PE')
+                logError "pim_error_message"
+                break
+            case "PB":
+                deviceResponses.put(device.deviceNetworkId, 'PB')
+                logWarn "pim_busy_message"
+                break
+            case "PK":
+                logDebug "upb_ack_message"
+                break
+            case "PN":
+                logWarn "upb_nak_message"
+                break
+            case "PR":
+                logDebug "pim_register_report_message"
+                break
+            case "PU":
+                logDebug "upb_report_message"
+                parseMessageReport(messageData)
+                break
+            default:
+                logError "Unknown message type"
+                break
+        }
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
         return
-    }
-
-    // Show converted and parsed type
-    def asciiMessage = new String(messageBytes)
-    logDebug "[${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)}]: [${asciiMessage}] (Converted)"
-
-    // Parse message type from original bytes
-    byte[] messageTypeBytes = messageBytes[0..1]
-    String messageType = new String(messageTypeBytes)
-
-    logDebug "[${asciiMessage}]: Type=[${messageType}]"
-
-    byte[] messageData = new byte[0]
-
-    if (messageBytes.size() > 2) {
-        messageData = messageBytes[2..-1]
-        String messageDataString = new String(messageData)
-        messageData = hubitat.helper.HexUtils.hexStringToByteArray(messageDataString)
-        logDebug "[${asciiMessage}]: Data=${messageDataString}"
-    }
-
-    switch (messageType) {
-        case "PA":
-            deviceResponses.put(device.deviceNetworkId, 'PA')
-            logDebug "pim_accept_message"
-            break
-        case "PE":
-            deviceResponses.put(device.deviceNetworkId, 'PE')
-            logError "pim_error_message"
-            break
-        case "PB":
-            deviceResponses.put(device.deviceNetworkId, 'PB')
-            logWarn "pim_busy_message"
-            break
-        case "PK":
-            logDebug "upb_ack_message"
-            break
-        case "PN":
-            logWarn "upb_nak_message"
-            break
-        case "PR":
-            logDebug "pim_register_report_message"
-            break
-        case "PU":
-            logDebug "upb_report_message"
-            parseMessageReport(messageData)
-            break
-        default:
-            logError "Unknown message type"
-            break
     }
 }
 
 /***************************************************************************
  * Custom Driver Functions
  ***************************************************************************/
-
 def openSocket() {
     logTrace "openSocket()"
     try {
-        interfaces.rawSocket.connect(settings.ipAddress, settings.portNumber.toInteger(), byteInterface: true, eol: '\r')
-        logInfo "Connected to ${settings.ipAddress}:${settings.portNumber}"
-        setNetworkStatus("Connected")
-        return true
+        isCorrectParent()
+        try {
+            interfaces.rawSocket.connect(settings.ipAddress, settings.portNumber.toInteger(), byteInterface: true, eol: '\r')
+            logInfo "Connected to ${settings.ipAddress}:${portNumber}"
+            setNetworkStatus("Connected")
+            return true
+        } catch (Exception e) {
+            logError "Connect failed to ${settings.ipAddress}:${portNumber} - ${e.getMessage()}"
+            setNetworkStatus("Connect failed", e.getMessage())
+        }
+        return false
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return false
     }
-    catch (Exception e) {
-        logError "Connect failed to ${settings.ipAddress}:${settings.portNumber} - ${e.getMessage()}"
-        setNetworkStatus("Connect failed", e.getMessage())
-    }
-    return false
 }
 
 def closeSocket() {
     logTrace "closeSocket()"
     try {
         interfaces.rawSocket.close()
-        logInfo "Disconnected from ${settings.ipAddress}:${settings.portNumber}"
+        logInfo "Disconnected from ${settings.ipAddress}:${portNumber}"
         setNetworkStatus("Disconnected")
         return true
-    }
-    catch (Exception e) {
-        logWarn "Disconnected failed from ${settings.ipAddress}:${settings.portNumber}"
+    } catch (Exception e) {
+        logWarn "Disconnect failed from ${settings.ipAddress}:${portNumber}"
         setNetworkStatus("Disconnect failed", e.getMessage())
     }
     return false
@@ -264,37 +322,50 @@ private def checksum(byte[] data) {
 
 private void setNetworkStatus(String state, String reason = '') {
     logTrace "setNetworkStatus()"
-    String msg = "${device} is ${state.toLowerCase()}${(reason) ? ' :' + reason : ''}"
+    String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
     sendEvent([name: "Network", value: state, descriptionText: msg, isStateChange: true])
     logInfo msg
 }
 
 private void setModuleStatus(String state, String reason = '') {
     logTrace "setModuleStatus()"
-    String msg = "${device} is ${state.toLowerCase()}${(reason) ? ' :' + reason : ''}"
+    String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
     sendEvent([name: "PIM", value: state, descriptionText: msg, isStateChange: true])
     logInfo msg
 }
 
 def setIPAddress(String ipAddress) {
     logTrace "setIPAddress()"
-    logInfo "Setting IP address to ${ipAddress}"
-    device.updateSetting("ipAddress", [value: ipAddress, type: "text"])
+    try {
+        isCorrectParent()
+        logInfo "Setting IP address to ${ipAddress}"
+        device.updateSetting("ipAddress", [value: ipAddress, type: "text"])
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
+    }
 }
 
 def setPortNumber(int portNumber) {
     logTrace "setPortNumber()"
-    logInfo "Setting port number to ${portNumber}"
-    device.updateSetting("portNumber", [value: portNumber, type: "number"])
+    try {
+        isCorrectParent()
+        logInfo "Setting port number to ${portNumber}"
+        device.updateSetting("portNumber", [value: portNumber, type: "number"])
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
+    }
 }
 
 def getCommandModeMessage() {
     logTrace "getCommandModeMessage()"
-
     def packet = new ByteArrayOutputStream()
     packet.write([0x70, 0x02] as byte[]) // Control Word
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug "Checksum: ${String.format("%02X", sum & 0xFF)}"
+    logDebug "Checksum: ${String.format('%02X', sum & 0xFF)}"
     packet.write(sum)
 
     String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
@@ -390,7 +461,6 @@ def transmitMessage(byte[] bytes) {
             return false
     }
 }
-
 
 def parseMessageReport(byte[] data) {
     logTrace "parseMessageReport()"
@@ -532,34 +602,34 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
     switch(messageDataId) {
         case UPB_ACTIVATE_LINK:
             sendEvent(name: "linkEvent", value: new groovy.json.JsonOutput().toJson([
-                eventType: "activate",
-                networkId: networkId & 0xFF,
-                sourceId: sourceId & 0xFF,
-                linkId: destinationId & 0xFF
+                    eventType: "activate",
+                    networkId: networkId & 0xFF,
+                    sourceId: sourceId & 0xFF,
+                    linkId: destinationId & 0xFF
             ]))
             logInfo "Generated linkEvent: activate, Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Link=${destinationId & 0xFF}"
             break
         case UPB_DEACTIVATE_LINK:
             sendEvent(name: "linkEvent", value: new groovy.json.JsonOutput().toJson([
-                eventType: "deactivate",
-                networkId: networkId & 0xFF,
-                sourceId: sourceId & 0xFF,
-                linkId: destinationId & 0xFF
+                    eventType: "deactivate",
+                    networkId: networkId & 0xFF,
+                    sourceId: sourceId & 0xFF,
+                    linkId: destinationId & 0xFF
             ]))
             logInfo "Generated linkEvent: deactivate, Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Link=${destinationId & 0xFF}"
             break
         case UPB_GOTO:
             int level = messageArgs.size() > 0 ? Math.min(messageArgs[0] & 0xFF, 100) : 0
             sendEvent(name: "deviceState", value: new groovy.json.JsonOutput().toJson([
-                eventType: "goto",
-                networkId: networkId & 0xFF,
-                sourceId: sourceId & 0xFF,
-                destinationId: destinationId & 0xFF,
-                level: level,
-                args: messageArgs.collect { it & 0xFF }
+                    eventType: "goto",
+                    networkId: networkId & 0xFF,
+                    sourceId: sourceId & 0xFF,
+                    destinationId: destinationId & 0xFF,
+                    level: level,
+                    args: messageArgs.collect { it & 0xFF }
             ]))
             logInfo "Generated deviceState: Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Destination=${destinationId & 0xFF}, Level=${level}"
-			break
+            break
         case UPB_FADE_START:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
             break
@@ -599,18 +669,18 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
             break
         case UPB_DEVICE_STATE:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
-			if (messageArgs.size() < 1) {
+            if (messageArgs.size() < 1) {
                 logError "[${messageDataString}]: No state data in Device State Report"
                 return
             }
             int level = Math.min(messageArgs[0] & 0xFF, 100)
             sendEvent(name: "deviceState", value: new groovy.json.JsonOutput().toJson([
-                eventType: "state_report",
-                networkId: networkId & 0xFF,
-                sourceId: sourceId & 0xFF,
-                destinationId: destinationId & 0xFF,
-                level: level,
-                args: messageArgs.collect { it & 0xFF }
+                    eventType: "state_report",
+                    networkId: networkId & 0xFF,
+                    sourceId: sourceId & 0xFF,
+                    destinationId: destinationId & 0xFF,
+                    level: level,
+                    args: messageArgs.collect { it & 0xFF }
             ]))
             logInfo "Generated deviceState: Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Destination=${destinationId & 0xFF}, Level=${level}"
             break
