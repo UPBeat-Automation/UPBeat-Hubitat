@@ -16,7 +16,7 @@ metadata {
         capability "Switch"
         capability "SwitchLevel"
         capability "Refresh"
-        command "receiveScene", ["string"] // Command to process scene data (Link ID)
+        command "receiveScene", ["string"]
         attribute "status", "enum", ["ok", "error"]
     }
 
@@ -214,6 +214,7 @@ def updateNetworkId(Long networkId) {
     try {
         isCorrectParent()
         device.updateSetting("networkId", [type: "number", value: networkId])
+        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
@@ -226,6 +227,7 @@ def updateDeviceId(Long deviceId) {
     try {
         isCorrectParent()
         device.updateSetting("deviceId", [type: "number", value: deviceId])
+        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
@@ -238,6 +240,7 @@ def updateChannelId(Long channelId) {
     try {
         isCorrectParent()
         device.updateSetting("channelId", [type: "number", value: channelId])
+        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
@@ -256,8 +259,11 @@ def refresh() {
         logDebug "UPB Device State Request Command [${data}]"
         if (getParent().sendPimMessage(data)) {
             logDebug "Device State Request successfully sent [${data}]"
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "Failed to issue Device State Request command [${data}]"
+            def error = "Failed to issue Device State Request command [${data}]"
+            logDebug error
+            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
         }
     } catch (IllegalStateException e) {
         log.error e.message
@@ -265,6 +271,7 @@ def refresh() {
         return
     } catch (Exception e) {
         logWarn "Call to refresh failed: ${e.message}"
+        sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
     }
 }
 
@@ -278,8 +285,11 @@ def flash(BigDecimal rateToFlash) {
             logDebug "UPB Flash [${data}]"
             sendEvent(name: "switch", value: "on", isStateChange: true)
             sendEvent(name: "level", value: 100, isStateChange: true)
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "Failed to issue command [${data}]"
+            def error = "Failed to issue flash command [${data}]"
+            logDebug error
+            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
         }
     } catch (IllegalStateException e) {
         log.error e.message
@@ -300,8 +310,11 @@ def on() {
             logDebug "Command successfully sent [${data}]"
             sendEvent(name: "switch", value: "on", isStateChange: true)
             sendEvent(name: "level", value: 100, unit: "%", isStateChange: true)
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "Failed to issue command [${data}]"
+            def error = "Failed to issue on command [${data}]"
+            logDebug error
+            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
         }
     } catch (IllegalStateException e) {
         log.error e.message
@@ -309,6 +322,7 @@ def on() {
         return
     } catch (Exception e) {
         logWarn "Call to on failed: ${e.message}"
+        sendEvent(name: "status", value: "error", descriptionText: "On command failed: ${e.message}", isStateChange: true)
     }
 }
 
@@ -324,8 +338,11 @@ def off() {
             logDebug "Command successfully sent [${data}]"
             sendEvent(name: "switch", value: "off", isStateChange: true)
             sendEvent(name: "level", value: 0, unit: "%", isStateChange: true)
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "Failed to issue command [${data}]"
+            def error = "Failed to issue off command [${data}]"
+            logDebug error
+            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
         }
     } catch (IllegalStateException e) {
         log.error e.message
@@ -333,6 +350,7 @@ def off() {
         return
     } catch (Exception e) {
         logWarn "Call to off failed: ${e.message}"
+        sendEvent(name: "status", value: "error", descriptionText: "Off command failed: ${e.message}", isStateChange: true)
     }
 }
 
@@ -357,8 +375,11 @@ def setLevel(value, duration = null) {
                 sendEvent(name: "switch", value: "off", isStateChange: false)
             }
             sendEvent(name: "level", value: value, unit: "%", isStateChange: true)
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "Failed to issue command [${data}]"
+            def error = "Failed to issue setLevel command [${data}]"
+            logDebug error
+            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
         }
     } catch (IllegalStateException e) {
         log.error e.message
@@ -366,6 +387,7 @@ def setLevel(value, duration = null) {
         return
     } catch (Exception e) {
         logWarn "Call to setLevel failed: ${e.message}"
+        sendEvent(name: "status", value: "error", descriptionText: "SetLevel command failed: ${e.message}", isStateChange: true)
     }
 }
 
@@ -400,9 +422,11 @@ def receiveScene(String linkId) {
             }
             sendEvent(name: "lastReceivedLinkId", value: linkId)
             logDebug "Rate ${rate} not fully implemented in Hubitat; action applied instantly"
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
             logDebug "No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration."
             sendEvent(name: "lastReceivedLinkId", value: linkId)
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         }
     } catch (IllegalStateException e) {
         log.error e.message
@@ -423,6 +447,7 @@ def handleDeviceState(int level, int networkId, int sourceId, int destinationId,
         logDebug "Updating switch to ${switchValue}, level to ${level} for device [${settings.deviceId}]"
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "level", value: level, isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
