@@ -16,8 +16,13 @@ metadata {
         capability "Switch"
         capability "SwitchLevel"
         capability "Refresh"
+        command "setLevel", [
+                [name: "level", type: "NUMBER", description: "Set level (0-100)", constraints: ["MIN": 0, "MAX": 100]],
+                [name: "duration", type: "ENUM", description: "Set the fade rate", constraints: FADE_RATE_MAPPING.keySet()]
+        ]
         command "receiveScene", ["string"]
         attribute "status", "enum", ["ok", "error"]
+
     }
 
     preferences {
@@ -355,26 +360,32 @@ def off() {
 }
 
 def setLevel(value, duration = null) {
-    logDebug "Sending Set-Percent to device [${settings.deviceId}] at rate [${duration}]"
+    logDebug "Sending Set-Percent to device [${settings.deviceId}] with level [${value}] and duration [${duration}]"
     try {
         isCorrectParent()
-        def rate = duration != null ? duration.intValue() : (settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255)
-        // Validate duration if provided
-        if (duration != null && duration.intValue() != 255 && (duration.intValue() < 0 || duration.intValue() > 15)) {
-            logWarn "Provided duration ${duration} is out of range (0-15 or 255). Using default fade rate."
-            rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
+        // Validate and clamp level
+        def level = value.toInteger()
+        level = Math.max(0, Math.min(level, 100))
+
+        // Convert duration to numeric rate
+        def rate
+        if (duration != null && FADE_RATE_MAPPING.containsKey(duration)) {
+            rate = FADE_RATE_MAPPING[duration]
+        } else {
+            rate = settings.fadeRate && FADE_RATE_MAPPING.containsKey(settings.fadeRate) ? FADE_RATE_MAPPING[settings.fadeRate] : 255
+            if (duration != null) {
+                logWarn "Invalid duration '${duration}'. Using default fade rate: ${settings.fadeRate ?: 'Default'} (rate=${rate})"
+            }
         }
-        logDebug "Sending Set-Percent to device [${settings.deviceId}] at rate [${rate}] (duration=${duration})"
-        byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), value.intValue(), rate, settings.channelId.intValue())
+
+        logDebug "Sending Set-Percent to device [${settings.deviceId}] with level=${level}, rate=${rate} (duration=${duration ?: 'not specified'})"
+        byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), level, rate, settings.channelId.intValue())
         logDebug "UPB Command Goto level [${data}]"
         if (getParent().sendPimMessage(data)) {
             logDebug "Command successfully sent [${data}]"
-            if (value > 0) {
-                sendEvent(name: "switch", value: "on", isStateChange: false)
-            } else {
-                sendEvent(name: "switch", value: "off", isStateChange: false)
-            }
-            sendEvent(name: "level", value: value, unit: "%", isStateChange: true)
+            // Update switch and level attributes
+            sendEvent(name: "switch", value: level > 0 ? "on" : "off", isStateChange: true)
+            sendEvent(name: "level", value: level, unit: "%", isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
             def error = "Failed to issue setLevel command [${data}]"
@@ -384,7 +395,6 @@ def setLevel(value, duration = null) {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     } catch (Exception e) {
         logWarn "Call to setLevel failed: ${e.message}"
         sendEvent(name: "status", value: "error", descriptionText: "SetLevel command failed: ${e.message}", isStateChange: true)
