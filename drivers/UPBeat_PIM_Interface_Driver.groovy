@@ -15,7 +15,7 @@ metadata {
         capability "Initialize"
         attribute "Network", "string"
         attribute "PIM", "string"
-        attribute "status", "enum", ["ok", "error"] // Added to track device state
+        attribute "status", "enum", ["ok", "error"]
     }
 
     preferences {
@@ -102,6 +102,27 @@ private void isCorrectParent() {
     }
 }
 
+private void setNetworkStatus(String state, String reason = '') {
+    logTrace "setNetworkStatus()"
+    String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
+    sendEvent(name: "Network", value: state, descriptionText: msg, isStateChange: true)
+    logInfo msg
+}
+
+private void setModuleStatus(String state, String reason = '') {
+    logTrace "setModuleStatus()"
+    String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
+    sendEvent(name: "PIM", value: state, descriptionText: msg, isStateChange: true)
+    logInfo msg
+}
+
+private void setDeviceStatus(String state, String reason = '', boolean forceEvent = false) {
+    logTrace "setDeviceStatus()"
+    String msg = reason ?: "${device} is ${state.toLowerCase()}"
+    sendEvent(name: "status", value: state, descriptionText: msg, isStateChange: forceEvent)
+    logInfo msg
+}
+
 /***************************************************************************
  * Core Driver Functions
  ***************************************************************************/
@@ -109,10 +130,10 @@ def installed() {
     logTrace "installed()"
     try {
         isCorrectParent()
-        sendEvent(name: "status", value: "ok", isStateChange: false)
+        setDeviceStatus("ok")
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -126,9 +147,10 @@ def uninstalled() {
         deviceMutexes.remove(device.deviceNetworkId)
         logInfo "Removing ${device.deviceNetworkId} response buffer"
         deviceResponses.remove(device.deviceNetworkId)
+        setDeviceStatus("ok")
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -138,9 +160,11 @@ def updated() {
     try {
         isCorrectParent()
         initialize()
+        setDeviceStatus("ok")
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -158,11 +182,23 @@ def initialize() {
         deviceMutexes.put(device.deviceNetworkId, new Object())
         deviceResponses.put(device.deviceNetworkId, new String())
         closeSocket()
-        openSocket()
-        setPIMCommandMode()
+        if (!openSocket()) {
+            setModuleStatus("Inactive", "Failed to open socket")
+            throw new Exception("Failed to open socket during initialization")
+        }
+        if (!setPIMCommandMode()) {
+            throw new Exception("Failed to set PIM command mode during initialization")
+        }
+        setDeviceStatus("ok")
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
+        return
+    } catch (Exception e) {
+        log.error e.message
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -178,11 +214,14 @@ def socketStatus(message) {
         if (message.contains('error: Stream closed') || message.contains('error: Connection timed out') || message.contains("receive error: Connection reset")) {
             logError "socketStatus(): ${message}"
             closeSocket()
+            logDebug "Reconncting in ${reconnectInterval} seconds"
             runIn(reconnectInterval, reconnectSocket)
+            setDeviceStatus("error", "Socket error: ${message}", true)
         }
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -201,10 +240,13 @@ def parse(hexMessage) {
             logDebug("[${hexMessage}]: ${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)} (EOL Removed)")
         } else {
             logError "[${hexMessage}]: No EOL found"
+            setDeviceStatus("error", "Message parsing failed: No EOL found", true)
+            return
         }
 
         if (messageBytes.size() < 2) {
             logError "[${hexMessage}]: Invalid data"
+            setDeviceStatus("error", "Message parsing failed: Invalid data length", true)
             return
         }
 
@@ -254,12 +296,16 @@ def parse(hexMessage) {
                 parseMessageReport(messageData)
                 break
             default:
-                logError "Unknown message type"
-                break
+                logError "Unknown message type: ${messageType}"
+                setDeviceStatus("error", "Message parsing failed: Unknown message type: ${messageType}", true)
+                return
         }
+        setModuleStatus("Active")
+        setDeviceStatus("ok")
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -275,15 +321,19 @@ def openSocket() {
             interfaces.rawSocket.connect(settings.ipAddress, settings.portNumber.toInteger(), byteInterface: true, eol: '\r')
             logInfo "Connected to ${settings.ipAddress}:${portNumber}"
             setNetworkStatus("Connected")
+            setDeviceStatus("ok")
             return true
         } catch (Exception e) {
             logError "Connect failed to ${settings.ipAddress}:${portNumber} - ${e.getMessage()}"
             setNetworkStatus("Connect failed", e.getMessage())
+            setModuleStatus("Inactive", "Failed to connect to socket")
+            setDeviceStatus("error", "Failed to connect to socket: ${e.getMessage()}", true)
         }
         return false
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
         return false
     }
 }
@@ -294,18 +344,35 @@ def closeSocket() {
         interfaces.rawSocket.close()
         logInfo "Disconnected from ${settings.ipAddress}:${portNumber}"
         setNetworkStatus("Disconnected")
+        setModuleStatus("Inactive")
+        setDeviceStatus("ok")
         return true
     } catch (Exception e) {
         logWarn "Disconnect failed from ${settings.ipAddress}:${portNumber}"
         setNetworkStatus("Disconnect failed", e.getMessage())
+        setModuleStatus("Inactive", "Failed to disconnect from socket")
+        setDeviceStatus("error", "Failed to disconnect from socket: ${e.getMessage()}", true)
+        return false
     }
-    return false
 }
 
 def reconnectSocket() {
     logTrace "reconnectSocket()"
-    openSocket()
-    setPIMCommandMode()
+    try {
+        if (openSocket()) {
+            if (setPIMCommandMode()) {
+                setDeviceStatus("ok")
+                return
+            }
+            throw new Exception("Failed to set PIM command mode during reconnect")
+        }
+        throw new Exception("Failed to open socket during reconnect")
+    } catch (Exception e) {
+        log.error e.message
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
+        return
+    }
 }
 
 private def sendBytes(byte[] bytes) {
@@ -320,29 +387,17 @@ private def checksum(byte[] data) {
     return (~sum + 1) & 0xFF
 }
 
-private void setNetworkStatus(String state, String reason = '') {
-    logTrace "setNetworkStatus()"
-    String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
-    sendEvent([name: "Network", value: state, descriptionText: msg, isStateChange: true])
-    logInfo msg
-}
-
-private void setModuleStatus(String state, String reason = '') {
-    logTrace "setModuleStatus()"
-    String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
-    sendEvent([name: "PIM", value: state, descriptionText: msg, isStateChange: true])
-    logInfo msg
-}
-
 def setIPAddress(String ipAddress) {
     logTrace "setIPAddress()"
     try {
         isCorrectParent()
         logInfo "Setting IP address to ${ipAddress}"
         device.updateSetting("ipAddress", [value: ipAddress, type: "text"])
+        setDeviceStatus("ok")
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -353,9 +408,11 @@ def setPortNumber(int portNumber) {
         isCorrectParent()
         logInfo "Setting port number to ${portNumber}"
         device.updateSetting("portNumber", [value: portNumber, type: "number"])
+        setDeviceStatus("ok")
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        setModuleStatus("Inactive", e.message)
+        setDeviceStatus("error", e.message, true)
         return
     }
 }
@@ -387,13 +444,16 @@ def getCommandModeMessage() {
 
 def setPIMCommandMode() {
     logTrace "setPIMCommandMode()"
-    // Hex encoded string 0x17 + 70028E + 0x0D (Command Mode)
     if (transmitMessage(getCommandModeMessage())) {
         logInfo "PIM was successfully set to command mode."
         setModuleStatus("Active")
+        setDeviceStatus("ok")
+        return true
     } else {
         logWarn "PIM failed to set to command mode."
         setModuleStatus("Inactive")
+        setDeviceStatus("error", "Failed to set PIM to command mode", true)
+        return false
     }
 }
 
