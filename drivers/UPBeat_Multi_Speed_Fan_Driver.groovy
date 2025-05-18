@@ -368,11 +368,19 @@ def handleDeviceState(int level, int networkId, int sourceId, int destinationId,
             logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
             return
         }
-        def speed = levelToSpeed(level)
+        // Map level to fan speed
+        def speed
+        if (level == 0) {
+            speed = "off"
+        } else if (level <= 33) {
+            speed = "low"
+        } else if (level <= 66) {
+            speed = "medium"
+        } else {
+            speed = "high"
+        }
         logDebug "Updating switch to ${(speed == "off") ? "off" : "on"} and speed to ${speed} for device [${settings.deviceId}]"
-        sendEvent(name: "switch", value: (speed == "off") ? "off" : "on", isStateChange: true)
-        sendEvent(name: "speed", value: speed, isStateChange: true)
-        sendEvent(name: "status", value: "ok", isStateChange: false)
+        setSpeed(speed)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
