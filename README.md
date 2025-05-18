@@ -17,7 +17,7 @@ A collection of Hubitat drivers for Universal Powerline Bus controls.
 
 or 
 
-1. Download the bundle from [releases](https://github.com/UPBeat-Automation/UPBeat-Hubitat/releases)
+1. Download the drivers bundle from [releases](https://github.com/UPBeat-Automation/UPBeat-Hubitat/releases)
    
 ## License
 This code is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-nc-sa/4.0/).  
