@@ -6,12 +6,12 @@
 * Author: UPBeat Automation
 */
 library(
-    name: "UPBeatLib",
-    namespace: "UPBeat",
-    author: "UPBeat Automation",
-    description: "Helper functions for UPB device and scene network ID encoding/decoding and packet sending",
-    category: "Utilities",
-    importUrl: ""
+        name: "UPBeatLib",
+        namespace: "UPBeat",
+        author: "UPBeat Automation",
+        description: "Helper functions for UPB device and scene network ID encoding/decoding and packet sending",
+        category: "Utilities",
+        importUrl: ""
 )
 
 def buildDeviceNetworkId(int networkId, int unitId, int channel) {
@@ -29,10 +29,10 @@ def buildDeviceNetworkId(int networkId, int unitId, int channel) {
 
     // Build the ID as a hexadecimal string: PT:NET:UID:CH (e.g., 01872A00 for packetType=1)
     String deviceNetworkId = String.format("UPBeat_%02X%02X%02X", networkId, unitId, channel)
-    
+
     // Log the components for debugging
     logDebug "DeviceNetworkId: ${deviceNetworkId} (NetworkId=${networkId}, UnitId=${unitId}, Channel=${channel})"
-    
+
     return deviceNetworkId
 }
 
@@ -48,10 +48,10 @@ def buildSceneNetworkId(int networkId, int linkId) {
 
     // Build the ID as a hexadecimal string: PT:NET:LID (e.g., 000A32 for packetType=0)
     String sceneNetworkId = String.format("UPBeat_%02X%02X", networkId, linkId)
-    
+
     // Log the components for debugging
     logDebug "SceneNetworkId: ${sceneNetworkId} (NetworkId=${networkId}, LinkId=${linkId})"
-    
+
     return sceneNetworkId
 }
 
@@ -73,10 +73,10 @@ def decodeDeviceNetworkId(String deviceNetworkId) {
         }
 
         return [
-            packetType: packetType,
-            networkId: networkId,
-            unitId: unitId,
-            channel: channel
+                packetType: packetType,
+                networkId: networkId,
+                unitId: unitId,
+                channel: channel
         ]
     } catch (NumberFormatException e) {
         throw new IllegalArgumentException("Invalid DeviceNetworkId format: ${deviceNetworkId}", e)
@@ -100,9 +100,9 @@ def decodeSceneNetworkId(String sceneNetworkId) {
         }
 
         return [
-            packetType: packetType,
-            networkId: networkId,
-            linkId: linkId
+                packetType: packetType,
+                networkId: networkId,
+                linkId: linkId
         ]
     } catch (NumberFormatException e) {
         throw new IllegalArgumentException("Invalid SceneNetworkId format: ${sceneNetworkId}", e)
