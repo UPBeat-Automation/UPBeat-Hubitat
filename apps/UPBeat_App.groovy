@@ -25,9 +25,9 @@ import java.util.UUID
                         [name: "channelId", type: "number", title: "Channel ID", range: "0..255", defaultValue: 1, required: true]
                 ]
         ],
-        "fan_switch": [
-                displayName: "UPB Fan Switch",
-                driverName: "UPB Fan Switch",
+        "single_speed_fan": [
+                displayName: "UPB Single-Speed Fan",
+                driverName: "UPB Single-Speed Fan",
                 category: "device",
                 requiredInputs: [
                         [name: "deviceId", type: "number", title: "Device ID", range: "1..250", required: true],
@@ -43,9 +43,9 @@ import java.util.UUID
                         [name: "channelId", type: "number", title: "Channel ID", range: "0..255", defaultValue: 1, required: true]
                 ]
         ],
-        "dimming_switch": [
-                displayName: "UPB Fan Switch",
-                driverName: "UPB Fan Switch",
+        "multi_speed_fan": [
+                displayName: "UPB Multi-Speed Fan",
+                driverName: "UPB Multi-Speed Fan",
                 category: "device",
                 requiredInputs: [
                         [name: "deviceId", type: "number", title: "Device ID", range: "1..250", required: true],
