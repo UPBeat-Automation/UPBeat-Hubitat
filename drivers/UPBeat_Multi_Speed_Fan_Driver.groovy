@@ -1,6 +1,6 @@
 /*
- * Hubitat Driver: UPB Multi-Speed Fan Switch
- * Description: Universal Powerline Bus Fan Switch Driver (Supports multiple speeds: off, low, medium, high)
+ * Hubitat Driver: UPB Multi-Speed Fan
+ * Description: Universal Powerline Bus UPB Multi-Speed Fan Driver (Supports multiple speeds: off, low, medium, high)
  * Copyright: 2025 UPBeat Automation
  * Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
  * Author: UPBeat Automation
@@ -11,7 +11,7 @@ import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
 metadata {
-    definition(name: "UPB Multi-Speed Fan Switch", namespace: "UPBeat", author: "UPBeat Automation", importUrl: "") {
+    definition(name: "UPB Multi-Speed Fan", namespace: "UPBeat", author: "UPBeat Automation", importUrl: "") {
         capability "Switch"
         capability "FanControl"
         capability "Refresh"

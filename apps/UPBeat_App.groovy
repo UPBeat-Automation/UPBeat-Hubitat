@@ -25,9 +25,27 @@ import java.util.UUID
                         [name: "channelId", type: "number", title: "Channel ID", range: "0..255", defaultValue: 1, required: true]
                 ]
         ],
+        "fan_switch": [
+                displayName: "UPB Fan Switch",
+                driverName: "UPB Fan Switch",
+                category: "device",
+                requiredInputs: [
+                        [name: "deviceId", type: "number", title: "Device ID", range: "1..250", required: true],
+                        [name: "channelId", type: "number", title: "Channel ID", range: "0..255", defaultValue: 1, required: true]
+                ]
+        ],
         "dimming_switch": [
                 displayName: "UPB Dimming Switch",
                 driverName: "UPB Dimming Switch",
+                category: "device",
+                requiredInputs: [
+                        [name: "deviceId", type: "number", title: "Device ID", range: "1..250", required: true],
+                        [name: "channelId", type: "number", title: "Channel ID", range: "0..255", defaultValue: 1, required: true]
+                ]
+        ],
+        "dimming_switch": [
+                displayName: "UPB Fan Switch",
+                driverName: "UPB Fan Switch",
                 category: "device",
                 requiredInputs: [
                         [name: "deviceId", type: "number", title: "Device ID", range: "1..250", required: true],
@@ -542,16 +560,8 @@ byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sour
     String packet_text_hex = HexUtils.byteArrayToHexString(packet.toByteArray())
 
     logDebug "PIM Packet: ${packet_text_hex}"
-    byte[] encoded_packet = packet_text_hex.getBytes()
 
-    message = new ByteArrayOutputStream()
-    message.write(0x14) // Transmit Byte
-    message.write(encoded_packet) // UPB Message + Checksum
-    message.write(0x0D) // EOL
-    pim_bytes = message.toByteArray()
-
-    logDebug "PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}"
-    return (pim_bytes)
+    return packet_text_hex.getBytes()
 }
 
 byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
