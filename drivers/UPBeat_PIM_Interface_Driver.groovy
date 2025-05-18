@@ -8,6 +8,8 @@
 import hubitat.helper.HexUtils
 import groovy.transform.Field
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 #include UPBeat.UPBeatLogger
 
 metadata {
@@ -180,7 +182,7 @@ def initialize() {
         logInfo "reconnectInterval: ${reconnectInterval}"
         logInfo "LogLevel: [${LOG_LEVELS[logLevel.toInteger()]}]"
         deviceMutexes.put(device.deviceNetworkId, new Object())
-        deviceResponses.put(device.deviceNetworkId, new String())
+        deviceResponses.put(device.deviceNetworkId, [response: 'None', semaphore: new Semaphore(0)])
         closeSocket()
         if (!openSocket()) {
             setModuleStatus("Inactive", "Failed to open socket")
@@ -269,18 +271,28 @@ def parse(hexMessage) {
             logDebug "[${asciiMessage}]: Data=${messageDataString}"
         }
 
+        def responseEntry = deviceResponses.get(device.deviceNetworkId)
         switch (messageType) {
             case "PA":
-                deviceResponses.put(device.deviceNetworkId, 'PA')
-                logDebug "pim_accept_message"
+                synchronized (responseEntry) {
+                    responseEntry.response = 'PA'
+                    logDebug "pim_accept_message"
+                    responseEntry.semaphore.release()
+                }
                 break
             case "PE":
-                deviceResponses.put(device.deviceNetworkId, 'PE')
-                logError "pim_error_message"
+                synchronized (responseEntry) {
+                    responseEntry.response = 'PE'
+                    logError "pim_error_message"
+                    responseEntry.semaphore.release()
+                }
                 break
             case "PB":
-                deviceResponses.put(device.deviceNetworkId, 'PB')
-                logWarn "pim_busy_message"
+                synchronized (responseEntry) {
+                    responseEntry.response = 'PB'
+                    logWarn "pim_busy_message"
+                    responseEntry.semaphore.release()
+                }
                 break
             case "PK":
                 logDebug "upb_ack_message"
@@ -463,30 +475,39 @@ def transmitMessage(byte[] bytes) {
         long retry = 0
         boolean exit = false
         String sendStatus = 'None'
-        deviceResponses.put(device.deviceNetworkId, 'None')
-
-        def startTime = now()
+        def responseEntry = deviceResponses.get(device.deviceNetworkId)
 
         while (!exit) {
             switch (sendStatus) {
                 case 'None':
                     sendStatus = 'Sent'
+                    responseEntry.response = 'None'
+                    responseEntry.semaphore.drainPermits() // Reset permits to 0
                     sendBytes(bytes)
                     logDebug "Sent UPB Message"
                     break
                 case 'Sent':
-                    switch (deviceResponses.get(device.deviceNetworkId)) {
-                        case "PA":
-                            sendStatus = 'Success'
-                            break
-                        case "PE":
-                            sendStatus = 'Failed'
-                            break
-                        case "PB":
-                            sendStatus = 'Retry'
-                            break
-                        default: // None etc
-                            break
+                    // Wait for the response to be set by parse()
+                    if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                        def response = responseEntry.response
+                        switch (response) {
+                            case "PA":
+                                sendStatus = 'Success'
+                                break
+                            case "PE":
+                                sendStatus = 'Failed'
+                                break
+                            case "PB":
+                                sendStatus = 'Retry'
+                                break
+                            default:
+                                logError "PIM response is invalid ${response}"
+                                sendStatus = 'Failed'
+                                break
+                        }
+                    } else {
+                        logError "Timeout waiting for PIM response"
+                        sendStatus = 'Failed'
                     }
                     break
                 case 'Retry':
@@ -508,17 +529,9 @@ def transmitMessage(byte[] bytes) {
                     exit = true
                     break
             }
-
-            if ((now() - startTime) > maxProcessingTime) {
-                sendStatus = 'Failed'
-            }
-            pauseExecution(200)
         }
 
-        if (deviceResponses.get(device.deviceNetworkId) == 'PA')
-            return true
-        else
-            return false
+        return responseEntry.response == 'PA'
     }
 }
 
