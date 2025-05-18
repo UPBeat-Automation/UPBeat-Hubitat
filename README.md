@@ -15,6 +15,10 @@ A collection of Hubitat drivers for Universal Powerline Bus controls.
 7. Copy the app code `.groovy` file in this [apps](apps) folder.
 8. Paste into the Hubitat Admin UI under **Apps Code > Add App**.
 
+or 
+
+1. Download the bundle from [releases](https://github.com/UPBeat-Automation/UPBeat-Hubitat/releases)
+   
 ## License
 This code is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-nc-sa/4.0/).  
 Copyright (c) 2025 UPBeat Automation.  
