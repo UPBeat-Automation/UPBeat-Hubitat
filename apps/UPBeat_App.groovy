@@ -543,6 +543,7 @@ private static byte checksum(byte[] data) {
 
 byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
     logTrace "buildSceneActivateCommand()"
+    logDebug "Network ID: ${networkId}"
     logDebug "Link ID: ${linkId}"
     logDebug "Source ID: ${sourceId}"
 
@@ -560,8 +561,16 @@ byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sour
     String packet_text_hex = HexUtils.byteArrayToHexString(packet.toByteArray())
 
     logDebug "PIM Packet: ${packet_text_hex}"
+    byte[] encoded_packet = packet_text_hex.getBytes()
 
-    return packet_text_hex.getBytes()
+    message = new ByteArrayOutputStream()
+    message.write(0x14) // Transmit Byte
+    message.write(encoded_packet) // UPB Message + Checksum
+    message.write(0x0D) // EOL
+    pim_bytes = message.toByteArray()
+
+    logDebug "PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}"
+    return (pim_bytes)
 }
 
 byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
