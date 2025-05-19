@@ -810,7 +810,7 @@ def handlePimLinkEvent(evt) {
                 try {
                     device.handleLinkEvent(eventType, networkId, sourceId, linkId)
                     processedCount++
-                    logDebug "Called handleLinkEvent(eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId}) on device ${device.label ?: device.name} (deviceId: ${device.getSetting('deviceId')})"
+                    logDebug "Dispatched handleLinkEvent(eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId}) on device ${device.label ?: device.name} (deviceId: ${device.getSetting('deviceId')})"
                 } catch (Exception e) {
                     logWarn "Error calling handleLinkEvent on device ${device.label ?: device.name}: ${e.message}"
                 }
@@ -826,7 +826,7 @@ def handlePimLinkEvent(evt) {
 }
 
 def handlePimDeviceState(evt) {
-    logTrace "handleCoreReportEvent()"
+    logTrace "handlePimDeviceState()"
     logDebug "Data: ${evt.value}"
     def eventData = new groovy.json.JsonSlurper().parseText(evt.value)
     def deviceId = eventData.destinationId == 0 ? buildDeviceNetworkId(eventData.networkId, eventData.sourceId, 1) : buildDeviceNetworkId(eventData.networkId, eventData.destinationId, 1)
@@ -839,11 +839,11 @@ def handlePimDeviceState(evt) {
     try {
         // Broadcast packet needs to be routed to the device
         if(eventData.destinationId == 0)
-            device.handleDeviceState(eventData.level, eventData.networkId, eventData.destinationId, eventData.sourceId, eventData.args)
+            device.handleDeviceEvent(eventData.level, eventData.networkId, eventData.destinationId, eventData.sourceId, eventData.args)
         else
-            device.handleDeviceState(eventData.level, eventData.networkId, eventData.sourceId, eventData.destinationId, eventData.args)
-        logDebug "Dispatched handleDeviceState to ${device.typeName}"
+            device.handleDeviceEvent(eventData.level, eventData.networkId, eventData.sourceId, eventData.destinationId, eventData.args)
+        logDebug "Dispatched handleDeviceEvent to ${device.typeName}"
     } catch (Exception e) {
-        logWarn "Failed to call handleDeviceState on ${deviceId}: ${e.message}"
+        logWarn "Failed to call handleDeviceEvent on ${deviceId}: ${e.message}"
     }
 }
