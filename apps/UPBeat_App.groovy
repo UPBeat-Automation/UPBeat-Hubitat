@@ -293,7 +293,6 @@ def mainPage() {
 /***************************************************************************
  * Global Static Data
  ***************************************************************************/
-@Field static ConcurrentHashMap currentLoadedDevice = new ConcurrentHashMap()
 @Field static String pimDeviceId = "UPBeat_PIM"
 
 /***************************************************************************
@@ -301,7 +300,7 @@ def mainPage() {
  ***************************************************************************/
 void installed() {
     logTrace "installed()"
-    updated()
+    initialize()
 }
 
 void uninstalled() {
@@ -311,29 +310,33 @@ void uninstalled() {
 
 void updated() {
     logTrace "updated()"
+    initialize()
+}
+
+def initialize() {
+    logTrace "initialize()"
+    getPimDevice()
+    // Clear existing subscriptions to prevent duplicates
     unsubscribe()
-    def pim = getPimDevice()
-    if (pim) {
-        subscribe(this, "linkEvent", "handleLinkEvent")
-        subscribe(this, "deviceEvent", "handleDeviceEvent")
-        logDebug "Subscribed to linkEvent and deviceState from PIM ${pim.deviceNetworkId}"
-    }
+    //getChildDevices().each { device ->
+    //    try {
+    //        logInfo "Subcribing to linkEvent on device ${device.label ?: device.name}"
+    //        subscribe(device, "linkEvent", "handleLinkEvent")
+    //    } catch (Exception e) {
+    //                logWarn "Error calling subscribe on device ${device.label ?: device.name}: ${e.message}"
+    //    }
+    //    try {
+    //        logInfo "Subcribing to deviceEvent on device ${device.label ?: device.name}"
+    //        subscribe(device, "deviceEvent", "handleDeviceEvent")
+    //    } catch (Exception e) {
+    //                logWarn "Error calling subscribe on device ${device.label ?: device.name}: ${e.message}"
+    //    }
+    //}
 }
 
-def getPimDevice()
-{
-    logTrace "getPimDevice()"
-
-    def pim = getChildDevice(pimDeviceId)
-
-    if (pim == null) {
-        logDebug "Creating PIM device"
-        pim = addChildDevice("UPBeat", "UPB Powerline Interface Module", pimDeviceId, [name: "UPB Powerline Interface Module"])
-    }
-
-    return pim
-}
-
+/***************************************************************************
+ * App Helper Functions
+ ***************************************************************************/
 void appButtonHandler(button) {
     switch(button) {
         case "addDeviceBtn":
@@ -401,9 +404,20 @@ void appButtonHandler(button) {
     }
 }
 
-/***************************************************************************
- * App Helper Functions
- ***************************************************************************/
+def getPimDevice()
+{
+    logTrace "getPimDevice()"
+
+    def pim = getChildDevice(pimDeviceId)
+
+    if (pim == null) {
+        logDebug "Creating PIM device"
+        pim = addChildDevice("UPBeat", "UPB Powerline Interface Module", pimDeviceId, [name: "UPB Powerline Interface Module"])
+    }
+
+    return pim
+}
+
 private String makeUri(String extraPath) {
     logTrace "makeUri()"
     return getFullLocalApiServerUrl() + extraPath + "?access_token=${state.accessToken}"
@@ -432,20 +446,6 @@ void deleteAllDevices() {
         logDebug "Deleting ${device.deviceNetworkId}"
         deleteChildDevice(device.deviceNetworkId)
     }
-}
-
-void eventHandler(evt) {
-    logTrace "eventHandler()"
-    logDebug evt
-}
-
-void getDevices() {
-    logTrace "getDevices()"
-}
-
-Map getCurrentLoaded() {
-    logTrace "getCurrentLoaded()"
-    return currentLoadedDevice
 }
 
 /***************************************************************************
@@ -785,48 +785,10 @@ boolean sendPimMessage(byte[] bytes) {
     return pim.transmitMessage(bytes)
 }
 
-
-def sendLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
-    logTrace "sendLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId})"
-    def eventData = [
-            eventSource: eventSource,
-            eventType: eventType,
-            networkId: networkId,
-            sourceId: sourceId,
-            linkId: linkId,
-    ]
-    sendEvent(name: "linkEvent", value: new groovy.json.JsonOutput().toJson(eventData))
-}
-
-def sendDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, byte[] messageArgs) {
-    logTrace "sendDeviceEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, destinationId: ${destinationId}, messageArgs: ${messageArgs})"
-    def eventData = [
-            eventSource: eventSource,
-            eventType: eventType,
-            networkId: networkId,
-            sourceId: sourceId,
-            destinationId: destinationId,
-            messageArgs: messageArgs,
-    ]
-    sendEvent(name: "deviceEvent", value: new groovy.json.JsonOutput().toJson(eventData))
-}
-
-def handleLinkEvent(evt) {
-    logTrace "handleLinkEvent()"
-    logDebug "Data: ${evt.value}"
+def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+    logTrace "handleLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId})"
     def startTime = now()
     try {
-        def eventData = new groovy.json.JsonSlurper().parseText(evt.value)
-        def eventType = eventData.eventType?.toString()
-        def networkId = eventData.networkId?.toInteger()
-        def sourceId = eventData.sourceId?.toInteger()
-        def linkId = eventData.linkId?.toInteger()
-
-        if (!eventType || networkId == null || sourceId == null || linkId == null) {
-            logWarn "Invalid event data: ${evt.value}. Required fields: linkId, eventType, networkId, sourceId"
-            return
-        }
-
         // Enumerate all child devices, call handleLinkEvent if supported
         def deviceCount = 0
         def processedCount = 0
@@ -834,9 +796,9 @@ def handleLinkEvent(evt) {
             deviceCount++
             if (device.name != "UPB Powerline Interface Module") {
                 try {
-                    device.handleLinkEvent(eventType, networkId, sourceId, linkId)
+                    device.handleLinkEvent(eventSource, eventType, networkId, sourceId, linkId)
                     processedCount++
-                    logDebug "Dispatched handleLinkEvent(eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId}) on device ${device.label ?: device.name} (deviceId: ${device.getSetting('deviceId')})"
+                    logDebug "Dispatched handleLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId}) on device ${device.label ?: device.name} (deviceId: ${device.getSetting('deviceId')})"
                 } catch (Exception e) {
                     logWarn "Error calling handleLinkEvent on device ${device.label ?: device.name}: ${e.message}"
                 }
@@ -851,11 +813,9 @@ def handleLinkEvent(evt) {
     }
 }
 
-def handleDeviceEvent(evt) {
-    logTrace "handleDeviceEvent()"
-    logDebug "Data: ${evt.value}"
-    def eventData = new groovy.json.JsonSlurper().parseText(evt.value)
-    def deviceId = eventData.destinationId == 0 ? buildDeviceNetworkId(eventData.networkId, eventData.sourceId, 1) : buildDeviceNetworkId(eventData.networkId, eventData.destinationId, 1)
+def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
+    logTrace "handleDeviceEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, destinationId: ${destinationId}, messageArgs: ${messageArgs})"
+    def deviceId = destinationId == 0 ? buildDeviceNetworkId(networkId, sourceId, 1) : buildDeviceNetworkId(networkId, destinationId, 1)
     def device = getChildDevice(deviceId)
 
     if (device == null) {
@@ -865,10 +825,10 @@ def handleDeviceEvent(evt) {
 
     try {
         // Broadcast packet needs to be routed to the device
-        if(eventData.destinationId == 0)
-            device.handleDeviceEvent(eventData.eventSource, eventData.eventType, eventData.networkId, eventData.destinationId, eventData.sourceId, eventData.messageArgs)
+        if(destinationId == 0)
+            device.handleDeviceEvent(eventSource, eventType, networkId, destinationId, sourceId, messageArgs)
         else
-            device.handleDeviceEvent(eventData.eventSource, eventData.eventType, eventData.networkId, eventData.sourceId, eventData.destinationId, eventData.messageArgs)
+            device.handleDeviceEvent(eventSource, eventType, networkId, sourceId, destinationId, messageArgs)
         logDebug "Dispatched handleDeviceEvent to ${device.typeName}"
     } catch (Exception e) {
         logWarn "Failed to call handleDeviceEvent on ${deviceId}: ${e.message}"

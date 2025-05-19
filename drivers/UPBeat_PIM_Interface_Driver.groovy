@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 #include UPBeat.UPBeatLogger
+#include UPBeat.UPBeatDriverLib
 
 metadata {
     definition(name: "UPB Powerline Interface Module", namespace: "UPBeat", author: "UPBeat Automation") {
@@ -97,13 +98,6 @@ metadata {
 /***************************************************************************
  * Helper Functions
  ***************************************************************************/
-private void isCorrectParent() {
-    def parentApp = getParent()
-    if (!parentApp || parentApp.name != "UPBeat App") {
-        throw new IllegalStateException("${device.name ?: 'Device'} must be created by the UPBeat App. Manual creation is not supported.")
-    }
-}
-
 private void setNetworkStatus(String state, String reason = '') {
     logTrace "setNetworkStatus()"
     String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
@@ -674,34 +668,20 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
     def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
     switch(messageDataId) {
         case UPB_ACTIVATE_LINK:
-            sendEvent(name: "linkEvent", value: new groovy.json.JsonOutput().toJson([
-                    eventType: "activate",
-                    networkId: networkId & 0xFF,
-                    sourceId: sourceId & 0xFF,
-                    linkId: destinationId & 0xFF
-            ]))
-            logInfo "Generated linkEvent: activate, Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Link=${destinationId & 0xFF}"
+            logInfo "Generate linkEvent: activate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            getParent().handleLinkEvent("pim","activate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
+            //sendLinkEvent("pim","activate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_DEACTIVATE_LINK:
-            sendEvent(name: "linkEvent", value: new groovy.json.JsonOutput().toJson([
-                    eventType: "deactivate",
-                    networkId: networkId & 0xFF,
-                    sourceId: sourceId & 0xFF,
-                    linkId: destinationId & 0xFF
-            ]))
-            logInfo "Generated linkEvent: deactivate, Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Link=${destinationId & 0xFF}"
+            logInfo "Generate linkEvent: deactivate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            getParent().handleLinkEvent("pim","deactivate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
+            //sendLinkEvent("pim","deactivate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_GOTO:
-            int level = messageArgs.size() > 0 ? Math.min(messageArgs[0] & 0xFF, 100) : 0
-            sendEvent(name: "deviceState", value: new groovy.json.JsonOutput().toJson([
-                    eventType: "goto",
-                    networkId: networkId & 0xFF,
-                    sourceId: sourceId & 0xFF,
-                    destinationId: destinationId & 0xFF,
-                    level: level,
-                    args: messageArgs.collect { it & 0xFF }
-            ]))
-            logInfo "Generated deviceState: Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Destination=${destinationId & 0xFF}, Level=${level}"
+            int[] args = messageArgs.collect { it & 0xFF } as int[]
+            logInfo "Generate deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
+            getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
+            //sendDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_FADE_START:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
@@ -746,16 +726,10 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                 logError "[${messageDataString}]: No state data in Device State Report"
                 return
             }
-            int level = Math.min(messageArgs[0] & 0xFF, 100)
-            sendEvent(name: "deviceState", value: new groovy.json.JsonOutput().toJson([
-                    eventType: "state_report",
-                    networkId: networkId & 0xFF,
-                    sourceId: sourceId & 0xFF,
-                    destinationId: destinationId & 0xFF,
-                    level: level,
-                    args: messageArgs.collect { it & 0xFF }
-            ]))
-            logInfo "Generated deviceState: Network=${networkId & 0xFF}, Source=${sourceId & 0xFF}, Destination=${destinationId & 0xFF}, Level=${level}"
+            int[] args = messageArgs.collect { it & 0xFF } as int[]
+            logInfo "Generate deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
+            getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
+            //sendDeviceEvent("pim","state_report",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF, args)
             break
         case UPB_DEVICE_STATUS:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
