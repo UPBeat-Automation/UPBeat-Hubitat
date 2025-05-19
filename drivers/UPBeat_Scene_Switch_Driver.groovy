@@ -81,6 +81,9 @@ def parse(String description) {
     }
 }
 
+/***************************************************************************
+ * Handlers for Driver Data
+ ***************************************************************************/
 def updateNetworkId(Long networkId) {
     logTrace "updateNetworkId()"
     try {
@@ -168,6 +171,9 @@ def off() {
     }
 }
 
+/***************************************************************************
+ * UPB Receive Handlers
+ ***************************************************************************/
 def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
     logTrace "handleLinkEvent(eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {

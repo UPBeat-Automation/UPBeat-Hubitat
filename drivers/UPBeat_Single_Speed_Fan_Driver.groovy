@@ -15,7 +15,6 @@ metadata {
         capability "Switch"
         capability "FanControl"
         capability "Refresh"
-        command "receiveScene", ["string"]
         command "setSpeed", [[name:"speed", type: "ENUM", constraints: ["off", "high"], description: "Set the fan speed (off or high)"]]
         attribute "status", "enum", ["ok", "error"]
         attribute "speed", "enum", ["off", "high"]
@@ -347,9 +346,9 @@ def setSpeed(String speed) {
 }
 
 /***************************************************************************
- * UPB Scene Receive Component Handlers
+ * UPB Receive Handlers
  ***************************************************************************/
-def receiveScene(String linkId) {
+def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
     logDebug "Received UPB scene command for ${device.deviceNetworkId}: Link ID ${linkId}"
     try {
         isCorrectParent()
@@ -380,7 +379,7 @@ def receiveScene(String linkId) {
     }
 }
 
-def handleDeviceState(int level, int networkId, int sourceId, int destinationId, List args) {
+def handleDeviceEvent(int level, int networkId, int sourceId, int destinationId, List args) {
     logTrace "handleDeviceState(level=${level}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${args})"
     try {
         isCorrectParent()

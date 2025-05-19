@@ -14,7 +14,6 @@ metadata {
     definition(name: "UPB Non-Dimming Switch", namespace: "UPBeat", author: "UPBeat Automation", importUrl: "") {
         capability "Switch"
         capability "Refresh"
-        command "receiveScene", ["string"]
         attribute "status", "enum", ["ok", "error"]
     }
 
@@ -335,9 +334,9 @@ def off() {
 }
 
 /***************************************************************************
- * UPB Scene Receive Component Handlers
+ * UPB Receive Handlers
  ***************************************************************************/
-def receiveScene(String linkId) {
+def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
     logDebug "Received UPB scene command for ${device.deviceNetworkId}: Link ID ${linkId}"
     try {
         isCorrectParent()
@@ -377,7 +376,7 @@ def receiveScene(String linkId) {
     }
 }
 
-def handleDeviceState(int level, int networkId, int sourceId, int destinationId, List args) {
+def handleDeviceEvent(int level, int networkId, int sourceId, int destinationId, List args) {
     logTrace "handleDeviceState(level=${level}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${args})"
     try {
         isCorrectParent()

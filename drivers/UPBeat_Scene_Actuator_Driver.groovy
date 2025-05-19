@@ -72,6 +72,21 @@ def updated() {
     }
 }
 
+def parse(String description) {
+    logTrace "parse(${description})"
+    try {
+        isCorrectParent()
+        // Currently a no-op, but adding parent check for consistency
+        logDebug "Parse called with description: ${description}"
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return
+    }
+}
+/***************************************************************************
+ * Handlers for Driver Data
+ ***************************************************************************/
 def updateNetworkId(Long networkId) {
     logTrace "updateNetworkId()"
     try {
@@ -98,19 +113,9 @@ def updateLinkId(Long linkId) {
     }
 }
 
-def parse(String description) {
-    logTrace "parse(${description})"
-    try {
-        isCorrectParent()
-        // Currently a no-op, but adding parent check for consistency
-        logDebug "Parse called with description: ${description}"
-    } catch (IllegalStateException e) {
-        log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
-    }
-}
-
+/***************************************************************************
+ * Handlers for Driver Capabilities
+ ***************************************************************************/
 def activate() {
     logDebug("Sending Activate Link command to scene [${settings.linkId}] on Network ID [${settings.networkId}]")
     try {
@@ -177,6 +182,9 @@ def deactivate() {
     }
 }
 
+/***************************************************************************
+ * UPB Receive Handlers
+ ***************************************************************************/
 def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
     logTrace "handleLinkEvent(eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
