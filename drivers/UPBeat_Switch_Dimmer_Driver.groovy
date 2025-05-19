@@ -88,7 +88,7 @@ def getReceiveComponents() {
         if (slotInput) {
             def parts = slotInput.split(":")
             if (parts.size() < 2 || parts.size() > 3) {
-                logWarn "Invalid format in receiveComponent${slot}: ${slotInput}. Expected linkID:level[:rate], setting value removed"
+                logWarn "Invalid format in receiveComponent${slot}: ${slotInput}. Expected linkID:level, setting value removed"
                 device.updateSetting("receiveComponent${slot}", "")
                 hasErrors = true
                 return
@@ -408,17 +408,16 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
 
         if (component) {
             def level = component.level
-            def rate = component.rate
             def slot = component.slot
-            logDebug "Executing action for Link ID ${linkId} (Slot ${slot}) on ${device.deviceNetworkId}: Level=${level}, Rate=${rate}"
+            logDebug "Executing action for Link ID ${linkId} (Slot ${slot}) on ${device.deviceNetworkId}: Level=${level}"
             if (level == 0) {
                 sendEvent(name: "switch", value: "off")
+                sendEvent(name: "level", value: level)
             } else {
                 sendEvent(name: "switch", value: "on")
                 sendEvent(name: "level", value: level)
             }
             sendEvent(name: "lastReceivedLinkId", value: linkId)
-            logDebug "Rate ${rate} not fully implemented in Hubitat; action applied instantly"
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
             logDebug "No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration."
