@@ -314,8 +314,8 @@ void updated() {
     unsubscribe()
     def pim = getPimDevice()
     if (pim) {
-        subscribe(pim, "linkEvent", "handlePimLinkEvent")
-        subscribe(pim, "deviceState", "handlePimDeviceState")
+        subscribe(this, "linkEvent", "handleLinkEvent")
+        subscribe(this, "deviceEvent", "handleDeviceEvent")
         logDebug "Subscribed to linkEvent and deviceState from PIM ${pim.deviceNetworkId}"
     }
 }
@@ -785,8 +785,35 @@ boolean sendPimMessage(byte[] bytes) {
     return pim.transmitMessage(bytes)
 }
 
-def handlePimLinkEvent(evt) {
-    logTrace "handlePimLinkEvent()"
+
+def sendLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+    logTrace "sendLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId})"
+    def eventData = [
+            eventSource: eventSource,
+            eventType: eventType,
+            networkId: networkId,
+            sourceId: sourceId,
+            linkId: linkId,
+    ]
+    sendEvent(name: "linkEvent", value: new groovy.json.JsonOutput().toJson(eventData))
+}
+
+def sendDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, byte[] messageArgs) {
+    logTrace "sendDeviceEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, destinationId: ${destinationId}, messageArgs: ${messageArgs})"
+    def eventData = [
+            eventSource: eventSource,
+            eventType: eventType,
+            networkId: networkId,
+            sourceId: sourceId,
+            destinationId: destinationId,
+            messageArgs: messageArgs.collect { it & 0xFF },
+    ]
+    logDebug "eventData=${eventData}"
+    sendEvent(name: "deviceEvent", value: new groovy.json.JsonOutput().toJson(eventData))
+}
+
+def handleLinkEvent(evt) {
+    logTrace "handleLinkEvent()"
     logDebug "Data: ${evt.value}"
     def startTime = now()
     try {
@@ -825,8 +852,8 @@ def handlePimLinkEvent(evt) {
     }
 }
 
-def handlePimDeviceState(evt) {
-    logTrace "handlePimDeviceState()"
+def handleDeviceEvent(evt) {
+    logTrace "handleDeviceEvent()"
     logDebug "Data: ${evt.value}"
     def eventData = new groovy.json.JsonSlurper().parseText(evt.value)
     def deviceId = eventData.destinationId == 0 ? buildDeviceNetworkId(eventData.networkId, eventData.sourceId, 1) : buildDeviceNetworkId(eventData.networkId, eventData.destinationId, 1)
@@ -836,12 +863,13 @@ def handlePimDeviceState(evt) {
         logWarn "No device found for ${deviceId}"
         return
     }
+
     try {
         // Broadcast packet needs to be routed to the device
         if(eventData.destinationId == 0)
-            device.handleDeviceEvent(eventData.level, eventData.networkId, eventData.destinationId, eventData.sourceId, eventData.args)
+            device.handleDeviceEvent(eventData.eventSource, eventData.eventType, eventData.networkId, eventData.destinationId, eventData.sourceId, eventData.messageArgs)
         else
-            device.handleDeviceEvent(eventData.level, eventData.networkId, eventData.sourceId, eventData.destinationId, eventData.args)
+            device.handleDeviceEvent(eventData.eventSource, eventData.eventType, eventData.networkId, eventData.sourceId, eventData.destinationId, eventData.messageArgs)
         logDebug "Dispatched handleDeviceEvent to ${device.typeName}"
     } catch (Exception e) {
         logWarn "Failed to call handleDeviceEvent on ${deviceId}: ${e.message}"
