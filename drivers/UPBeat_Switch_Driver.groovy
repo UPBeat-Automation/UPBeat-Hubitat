@@ -157,7 +157,7 @@ def updated() {
         // Clear state
         state.clear()
     } catch (IllegalStateException e) {
-        logError e.message
+        log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
         logWarn "Failed to update: ${e.message}"
