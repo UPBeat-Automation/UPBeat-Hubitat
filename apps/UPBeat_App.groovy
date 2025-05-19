@@ -543,7 +543,6 @@ private static byte checksum(byte[] data) {
 
 byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
     logTrace "buildSceneActivateCommand()"
-    logDebug "Network ID: ${networkId}"
     logDebug "Link ID: ${linkId}"
     logDebug "Source ID: ${sourceId}"
 
@@ -787,20 +786,42 @@ boolean sendPimMessage(byte[] bytes) {
 }
 
 def handlePimLinkEvent(evt) {
-    logTrace "handleControlCommandEvent()"
+    logTrace "handlePimLinkEvent()"
     logDebug "Data: ${evt.value}"
-    def eventData = new groovy.json.JsonSlurper().parseText(evt.value)
-    def sceneId = buildSceneNetworkId(eventData.networkId, eventData.linkId)
-    def device = getChildDevice(sceneId)
-    if (device == null) {
-        logWarn "No scene device found for ${sceneId}"
-        return
-    }
+    def startTime = now()
     try {
-        device.handleLinkEvent(eventData.eventType, eventData.networkId, eventData.sourceId, eventData.linkId)
-        logDebug "Dispatched handleLinkEvent to ${device.typeName} for ${eventData.eventType}"
+        def eventData = new groovy.json.JsonSlurper().parseText(evt.value)
+        def eventType = eventData.eventType?.toString()
+        def networkId = eventData.networkId?.toInteger()
+        def sourceId = eventData.sourceId?.toInteger()
+        def linkId = eventData.linkId?.toInteger()
+
+        if (!eventType || networkId == null || sourceId == null || linkId == null) {
+            logWarn "Invalid event data: ${evt.value}. Required fields: linkId, eventType, networkId, sourceId"
+            return
+        }
+
+        // Enumerate all child devices, call handleLinkEvent if supported
+        def deviceCount = 0
+        def processedCount = 0
+        getChildDevices().each { device ->
+            deviceCount++
+            if (device.name != "UPB Powerline Interface Module") {
+                try {
+                    device.handleLinkEvent(eventType, networkId, sourceId, linkId)
+                    processedCount++
+                    logDebug "Called handleLinkEvent(eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId}) on device ${device.label ?: device.name} (deviceId: ${device.getSetting('deviceId')})"
+                } catch (Exception e) {
+                    logWarn "Error calling handleLinkEvent on device ${device.label ?: device.name}: ${e.message}"
+                }
+            } else {
+                logDebug "Skipped device ${device.label ?: device.name}: ${device.name == 'UPB Powerline Interface Module' ? 'PIM device' : 'lacks handleLinkEvent method'}"
+            }
+        }
+        def elapsedTime = now() - startTime
+        logDebug "Processed link event for linkId ${linkId}: ${processedCount} of ${deviceCount} devices in ${elapsedTime}ms"
     } catch (Exception e) {
-        logWarn "Failed to call handleLinkEvent on ${sceneId}: ${e.message}"
+        logWarn "Failed to process PIM link event: ${e.message}"
     }
 }
 
@@ -810,6 +831,7 @@ def handlePimDeviceState(evt) {
     def eventData = new groovy.json.JsonSlurper().parseText(evt.value)
     def deviceId = eventData.destinationId == 0 ? buildDeviceNetworkId(eventData.networkId, eventData.sourceId, 1) : buildDeviceNetworkId(eventData.networkId, eventData.destinationId, 1)
     def device = getChildDevice(deviceId)
+
     if (device == null) {
         logWarn "No device found for ${deviceId}"
         return
