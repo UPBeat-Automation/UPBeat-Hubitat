@@ -806,9 +806,8 @@ def sendDeviceEvent(String eventSource, String eventType, int networkId, int sou
             networkId: networkId,
             sourceId: sourceId,
             destinationId: destinationId,
-            messageArgs: messageArgs.collect { it & 0xFF },
+            messageArgs: messageArgs,
     ]
-    logDebug "eventData=${eventData}"
     sendEvent(name: "deviceEvent", value: new groovy.json.JsonOutput().toJson(eventData))
 }
 
