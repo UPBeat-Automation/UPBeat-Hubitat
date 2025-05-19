@@ -25,7 +25,7 @@ metadata {
         input name: "networkId", type: "number", title: "Network ID", description: "UPB Network ID (0-255)", required: true, range: "0..255"
         input name: "deviceId", type: "number", title: "Device ID", description: "UPB Device ID (0-255)", required: true, range: "0..255"
         input name: "channelId", type: "number", title: "Channel ID", description: "UPB Channel ID (0-255)", required: true, range: "0..255"
-        input name: "receiveComponent1", type: "text", title: "Receive Component 1", description: "Format: linkID:level:rate (e.g., 1:33:0 for low, 1:66:0 for medium, 1:100:0 for high, 1:0:0 for off)"
+        input name: "receiveComponent1", type: "text", title: "Receive Component 1"
         input name: "receiveComponent2", type: "text", title: "Receive Component 2"
         input name: "receiveComponent3", type: "text", title: "Receive Component 3"
         input name: "receiveComponent4", type: "text", title: "Receive Component 4"
@@ -73,6 +73,71 @@ private String levelToSpeed(int level) {
     return "high"
 }
 
+def getReceiveComponents() {
+    def components = [:]
+    def hasErrors = false
+    def isDimmable = device.hasCapability("SwitchLevel")
+    (1..16).each { slot ->
+        def slotInput = settings."receiveComponent${slot}"?.trim()
+        if (slotInput) {
+            def parts = slotInput.split(":")
+            if (parts.size() < 2 || parts.size() > 3) {
+                logWarn "Invalid format in receiveComponent${slot}: ${slotInput}. Expected linkID:level, setting value removed"
+                device.updateSetting("receiveComponent${slot}", "")
+                hasErrors = true
+                return
+            }
+            try {
+                def linkId = parts[0].toInteger()
+                def level = parts[1].toInteger()
+                if (linkId < 1 || linkId > 250) {
+                    logWarn "Invalid linkId in receiveComponent${slot}: ${linkId}. Must be 1-250, setting value removed"
+                    device.updateSetting("receiveComponent${slot}", "")
+                    hasErrors = true
+                    return
+                }
+                if (isDimmable) {
+                    if (level < 0 || level > 100) {
+                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0-100 for dimmable device, setting value removed"
+                        device.updateSetting("receiveComponent${slot}", "")
+                        hasErrors = true
+                        return
+                    }
+                } else {
+                    if (level != 0 && level != 100) {
+                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0 or 100 for non-dimmable device, setting value removed"
+                        device.updateSetting("receiveComponent${slot}", "")
+                        hasErrors = true
+                        return
+                    }
+                }
+                def linkIdKey = linkId.toString()
+                if (components.containsKey(linkIdKey)) {
+                    logWarn "Duplicate linkId ${linkId} in receiveComponent${slot}, setting value removed"
+                    device.updateSetting("receiveComponent${slot}", "")
+                    hasErrors = true
+                    return
+                }
+                components[linkIdKey] = [level: level]
+            } catch (NumberFormatException e) {
+                logWarn "Invalid number format in receiveComponent${slot}: ${slotInput}, setting value removed"
+                device.updateSetting("receiveComponent${slot}", "")
+                hasErrors = true
+            } catch (Exception e) {
+                logWarn "Unexpected error in receiveComponent${slot}: ${e.message}, setting value removed"
+                device.updateSetting("receiveComponent${slot}", "")
+                hasErrors = true
+            }
+        }
+    }
+    if (hasErrors) {
+        sendEvent(name: "status", value: "error", descriptionText: "Invalid receiveComponents detected; check logs and verify settings", isStateChange: true)
+    } else if (device.currentValue("status") != "ok") {
+        sendEvent(name: "status", value: "ok", descriptionText: "All receiveComponents valid", isStateChange: true)
+    }
+    return components
+}
+
 /***************************************************************************
  * Core Driver Functions
  ***************************************************************************/
@@ -95,84 +160,26 @@ def updated() {
     logTrace "updated()"
     try {
         isCorrectParent()
-        def components = [:]
-        def errors = []
 
-        (1..16).each { slot ->
-            def slotInput = settings."receiveComponent${slot}"?.trim()
-            if (slotInput) {
-                def parts = slotInput.split(":")
-                if (parts.size() < 2 || parts.size() > 3) {
-                    errors << "Slot ${slot}: Invalid format: ${slotInput}. Expected linkID:level:rate (rate optional). linkID: 1-250, level: 0, 33, 66, or 100, rate: 0-255."
-                    return
-                }
-
-                def linkId, level, rate
-                try {
-                    linkId = parts[0].toInteger()
-                    level = parts[1].toInteger()
-                    rate = parts.size() == 3 ? parts[2].toInteger() : 0
-                } catch (NumberFormatException e) {
-                    errors << "Slot ${slot}: Invalid number format in ${slotInput}: ${e.message}."
-                    return
-                }
-
-                if (linkId < 1 || linkId > 250) {
-                    errors << "Slot ${slot}: Invalid linkId: ${linkId}. Must be between 1 and 250."
-                    return
-                }
-                if (level != 0 && level != 33 && level != 66 && level != 100) {
-                    errors << "Slot ${slot}: Invalid level: ${level}. Must be 0 (off), 33 (low), 66 (medium), or 100 (high) for multi-speed fan switch."
-                    return
-                }
-                if (rate < 0 || rate > 255) {
-                    errors << "Slot ${slot}: Invalid rate: ${rate}. Must be between 0 and 255."
-                    return
-                }
-
-                def linkIdKey = linkId.toString()
-                if (components.containsKey(linkIdKey)) {
-                    errors << "Slot ${slot}: Duplicate Link ID ${linkId} already defined in slot ${components[linkIdKey].slot}."
-                    return
-                }
-
-                components[linkIdKey] = [
-                        level: level,
-                        rate: rate,
-                        slot: slot.toString()
-                ]
-            }
-        }
-
-        if (errors) {
-            errors.each { error -> logWarn error }
-            throw new Exception("Invalid receive link configuration.")
-        }
-
-        device.updateDataValue("receiveComponents", JsonOutput.toJson(components))
-        def logMessage = "Stored UPB receive links for ${device.deviceNetworkId}:\n"
-        (1..16).each { slot ->
-            def linkId = components.find { it.value.slot == slot.toString() }?.key?.toInteger()
-            if (linkId) {
-                def comp = components[linkId.toString()]
-                logMessage += "Slot ${slot}: Link ID ${linkId}, Level ${comp.level}%, Rate ${comp.rate}\n"
-            } else {
-                logMessage += "Slot ${slot}: Unused\n"
-            }
-        }
-        logDebug logMessage
-
-        def result = getParent().updateDeviceSettings(device, settings)
-        if (!result.success) {
+        // Update parent device settings this will updated the device ID
+        def result = parent.updateDeviceSettings(device, settings)
+        if (result.success) {
+            sendEvent(name: "status", value: "ok", isStateChange: false)
+        } else {
             logError "Failed to update device: ${result.error}"
             sendEvent(name: "status", value: "error", descriptionText: result.error, isStateChange: true)
             return
         }
 
+        // Get validated receiveComponents
+        def components = getReceiveComponents()
+
+        device.updateDataValue("receiveComponents", JsonOutput.toJson(components))
+
+        // Clear state
         state.clear()
-        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
         logWarn "Failed to update: ${e.message}"
@@ -343,12 +350,10 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
 
         if (component) {
             def level = component.level
-            def rate = component.rate
             def slot = component.slot
-            logDebug "Executing action for Link ID ${linkId} (Slot ${slot}): Level=${level}, Rate=${rate}"
+            logDebug "Executing action for Link ID ${linkId} (Slot ${slot}): Level=${level}"
             def speed = levelToSpeed(level)
             setSpeed(speed)
-            logDebug "Rate ${rate} not fully implemented; action applied instantly"
         } else {
             logDebug "No action defined for Link ID ${linkId}. Check receive link configuration."
             sendEvent(name: "status", value: "ok", isStateChange: false)
