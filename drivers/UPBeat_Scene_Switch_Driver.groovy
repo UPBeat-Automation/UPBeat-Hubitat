@@ -6,6 +6,8 @@
 * Author: UPBeat Automation
 */
 #include UPBeat.UPBeatLogger
+#include UPBeat.UPBeatDriverLib
+
 metadata {
     definition(name: "UPB Scene Switch", namespace: "UPBeat", author: "UPBeat Automation", importUrl: "", canAddDevice: false) {
         capability "Switch"
@@ -17,16 +19,6 @@ preferences {
     input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
     input name: "networkId", type: "number", title: "Network ID", required: false
     input name: "linkId", type: "number", title: "Link ID", required: false
-}
-
-/***************************************************************************
- * Helper Functions
- ***************************************************************************/
-private void isCorrectParent() {
-    def parentApp = getParent()
-    if (!parentApp || parentApp.name != "UPBeat App") {
-        throw new IllegalStateException("${device.name ?: 'Device'} must be created by the UPBeat App. Manual creation is not supported.")
-    }
 }
 
 /***************************************************************************
@@ -122,12 +114,15 @@ def on() {
             sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
             return
         }
-        byte[] data = getParent().buildSceneActivateCommand(settings.networkId.intValue(), settings.linkId.intValue(), 0)
+        def networkId = settings.networkId.intValue()
+        def linkId = settings.linkId.intValue()
+        byte[] data = getParent().buildSceneActivateCommand(networkId, linkId, 0)
         logDebug("UPB Command Activate [${data}]")
         if (getParent().sendPimMessage(data)) {
             logDebug("Command successfully sent [${data}]")
             sendEvent(name: "switch", value: "on", isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
+            getParent().handleLinkEvent("user", "activate", networkId, 0, linkId)
         } else {
             logDebug("Failed to issue command [${data}]")
             sendEvent(name: "status", value: "error", descriptionText: "Failed to send activate command", isStateChange: true)
@@ -151,12 +146,15 @@ def off() {
             sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
             return
         }
-        byte[] data = getParent().buildSceneDeactivateCommand(settings.networkId.intValue(), settings.linkId.intValue(), 0)
+        def networkId = settings.networkId.intValue()
+        def linkId = settings.linkId.intValue()
+        byte[] data = getParent().buildSceneDeactivateCommand(networkId, linkId, 0)
         logDebug("UPB Command Deactivate [${data}]")
         if (getParent().sendPimMessage(data)) {
             logDebug("Command successfully sent [${data}]")
             sendEvent(name: "switch", value: "off", isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
+            getParent().handleLinkEvent("user", "deactivate", networkId, 0, linkId)
         } else {
             logDebug("Failed to issue command [${data}]")
             sendEvent(name: "status", value: "error", descriptionText: "Failed to send deactivate command", isStateChange: true)
@@ -174,8 +172,8 @@ def off() {
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
-def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
-    logTrace "handleLinkEvent(eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
+def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+    logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
         if (settings.networkId != networkId || settings.linkId != linkId) {
@@ -187,11 +185,13 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
             case "activate":
                 logDebug "Activating scene [${settings.linkId}] due to Link Event"
                 sendEvent(name: "switch", value: "on", isStateChange: true)
+                sendEvent(name: "status", value: "ok", isStateChange: false)
                 success = true
                 break
             case "deactivate":
                 logDebug "Deactivating scene [${settings.linkId}] due to Link Event"
                 sendEvent(name: "switch", value: "off", isStateChange: true)
+                sendEvent(name: "status", value: "ok", isStateChange: false)
                 success = true
                 break
             default:

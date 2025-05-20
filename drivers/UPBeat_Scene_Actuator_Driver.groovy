@@ -6,6 +6,8 @@
 * Author: UPBeat Automation
 */
 #include UPBeat.UPBeatLogger
+#include UPBeat.UPBeatDriverLib
+
 metadata {
     definition(name: "UPB Scene Actuator", namespace: "UPBeat", author: "UPBeat Automation", importUrl: "", canAddDevice: false) {
         capability "Actuator"
@@ -18,16 +20,6 @@ metadata {
         input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
         input name: "networkId", type: "number", title: "Network ID", required: true, range: "0..255"
         input name: "linkId", type: "number", title: "Link ID", required: true, range: "1..250"
-    }
-}
-
-/***************************************************************************
- * Helper Functions
- ***************************************************************************/
-private void isCorrectParent() {
-    def parentApp = getParent()
-    if (!parentApp || parentApp.name != "UPBeat App") {
-        throw new IllegalStateException("${device.name ?: 'Device'} must be created by the UPBeat App. Manual creation is not supported.")
     }
 }
 
@@ -84,6 +76,7 @@ def parse(String description) {
         return
     }
 }
+
 /***************************************************************************
  * Handlers for Driver Data
  ***************************************************************************/
@@ -117,24 +110,21 @@ def updateLinkId(Long linkId) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def activate() {
-    logDebug("Sending Activate Link command to scene [${settings.linkId}] on Network ID [${settings.networkId}]")
+    logDebug("Sending Activate to scene [${settings.linkId}] on Network ID [${settings.networkId}]")
     try {
         isCorrectParent()
         if (settings.networkId == null || settings.linkId == null) {
-            logError "Network ID and Link ID must be configured before triggering the scene"
+            logError "Network ID and Link ID must be configured before activating the scene"
             sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
             return
         }
-        byte[] data = getParent().buildSceneActivateCommand(settings.networkId.intValue(), settings.linkId.intValue(), 0)
-        logDebug("UPB Command Activate Link [${data}]")
+        def networkId = settings.networkId.intValue()
+        def linkId = settings.linkId.intValue()
+        byte[] data = getParent().buildSceneActivateCommand(networkId, linkId, 0)
+        logDebug("UPB Command Activate [${data}]")
         if (getParent().sendPimMessage(data)) {
             logDebug("Command successfully sent [${data}]")
-            // Update lastTrigger with the current timestamp
-            String timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-            String lastTriggerValue = "Activated at ${timestamp} by user"
-            sendEvent(name: "lastTrigger", value: lastTriggerValue)
-            logInfo "Scene last trigger updated: ${lastTriggerValue}"
-            sendEvent(name: "status", value: "ok", isStateChange: false)
+            getParent().handleLinkEvent("user", "activate", networkId, 0, linkId)
         } else {
             logDebug("Failed to issue command [${data}]")
             sendEvent(name: "status", value: "error", descriptionText: "Failed to send activate command", isStateChange: true)
@@ -150,24 +140,21 @@ def activate() {
 }
 
 def deactivate() {
-    logDebug("Sending Deactivate Link command to scene [${settings.linkId}] on Network ID [${settings.networkId}]")
+    logDebug("Sending Deactivate to scene [${settings.linkId}] on Network ID [${settings.networkId}]")
     try {
         isCorrectParent()
         if (settings.networkId == null || settings.linkId == null) {
-            logError "Network ID and Link ID must be configured before triggering the scene"
+            logError "Network ID and Link ID must be configured before deactivating the scene"
             sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
             return
         }
-        byte[] data = getParent().buildSceneDeactivateCommand(settings.networkId.intValue(), settings.linkId.intValue(), 0)
-        logDebug("UPB Command Deactivate Link [${data}]")
+        def networkId = settings.networkId.intValue()
+        def linkId = settings.linkId.intValue()
+        byte[] data = getParent().buildSceneDeactivateCommand(networkId, linkId, 0)
+        logDebug("UPB Command Deactivate [${data}]")
         if (getParent().sendPimMessage(data)) {
             logDebug("Command successfully sent [${data}]")
-            // Update lastTrigger with the current timestamp
-            String timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-            String lastTriggerValue = "Deactivated at ${timestamp} by user"
-            sendEvent(name: "lastTrigger", value: lastTriggerValue)
-            logInfo "Scene last trigger updated: ${lastTriggerValue}"
-            sendEvent(name: "status", value: "ok", isStateChange: false)
+            getParent().handleLinkEvent("user", "deactivate", networkId, 0, linkId)
         } else {
             logDebug("Failed to issue command [${data}]")
             sendEvent(name: "status", value: "error", descriptionText: "Failed to send deactivate command", isStateChange: true)
@@ -185,8 +172,8 @@ def deactivate() {
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
-def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
-    logTrace "handleLinkEvent(eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
+def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+    logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
         if (settings.networkId != networkId || settings.linkId != linkId) {
@@ -197,15 +184,14 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
         String timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
         switch (eventType) {
             case "activate":
-                logDebug "Activating scene [${settings.linkId}] due to Link Event"
-                def lastTriggerValue = "Activated at ${timestamp} by ${sourceId}"
+
+                def lastTriggerValue = "Activated at ${timestamp} by ${(eventSource == "user") ? eventSource :  sourceId}"
                 sendEvent(name: "lastTrigger", value: lastTriggerValue)
                 logInfo "Scene last trigger updated: ${lastTriggerValue}"
                 success = true
                 break
             case "deactivate":
-                logDebug "Deactivating scene [${settings.linkId}] due to Link Event"
-                def lastTriggerValue = "Deactivated at ${timestamp} by ${sourceId}"
+                def lastTriggerValue = "Deactivated at ${timestamp} by ${(eventSource == "user") ? eventSource :  sourceId}"
                 sendEvent(name: "lastTrigger", value: lastTriggerValue)
                 logInfo "Scene last trigger updated: ${lastTriggerValue}"
                 success = true
