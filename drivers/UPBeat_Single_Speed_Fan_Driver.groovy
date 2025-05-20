@@ -170,10 +170,10 @@ def refresh() {
 }
 
 def on() {
-	logTrace "on()"
+    logTrace "on()"
     try {
         isCorrectParent()
-		logDebug "Sending ON to device [${settings.deviceId}]"
+        logDebug "Sending ON to device [${settings.deviceId}]"
         byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
         if (getParent().sendPimMessage(data)) {
@@ -199,7 +199,7 @@ def off() {
     logTrace "off()"
     try {
         isCorrectParent()
-		logDebug "Sending OFF to device [${settings.deviceId}]"
+        logDebug "Sending OFF to device [${settings.deviceId}]"
         byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
         if (getParent().sendPimMessage(data)) {
@@ -311,12 +311,12 @@ def handleDeviceEvent(String eventSource, String eventType, int networkId, int s
             logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
             return
         }
-		
-		int level = messageArgs.size() > 0 ? Math.min(messageArgs[0], 100) : 0
-		
+
+        int level = messageArgs.size() > 0 ? Math.min(messageArgs[0], 100) : 0
+
         def speed = (level == 0) ? "off" : "high"
-		def switchValue = (level == 0) ? "off" : "on"
-		
+        def switchValue = (level == 0) ? "off" : "on"
+
         logDebug "Updating switch to ${switchValue} and speed to ${speed} for device [${settings.deviceId}]"
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "speed", value: speed, isStateChange: true)
