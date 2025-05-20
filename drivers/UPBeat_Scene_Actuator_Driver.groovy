@@ -107,7 +107,7 @@ def activate() {
         }
         def networkId = settings.networkId.intValue()
         def linkId = settings.linkId.intValue()
-        logDebug("Sending Activate to scene [${linkId}] on Network ID [${networkId}]")
+        logDebug("Sending activate to scene [${linkId}] on Network ID [${networkId}]")
         byte[] data = getParent().buildSceneActivateCommand(networkId, linkId, 0)
         logDebug("UPB Command Activate [${data}]")
         if (getParent().sendPimMessage(data)) {
@@ -138,7 +138,7 @@ def deactivate() {
         }
         def networkId = settings.networkId.intValue()
         def linkId = settings.linkId.intValue()
-        logDebug("Sending Deactivate to scene [${linkId}] on Network ID [${networkId}]")
+        logDebug("Sending deactivate to scene [${linkId}] on Network ID [${networkId}]")
         byte[] data = getParent().buildSceneDeactivateCommand(networkId, linkId, 0)
         logDebug("UPB Command Deactivate [${data}]")
         if (getParent().sendPimMessage(data)) {
