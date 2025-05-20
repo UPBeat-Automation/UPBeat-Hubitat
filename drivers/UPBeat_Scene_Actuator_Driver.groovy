@@ -64,19 +64,6 @@ def updated() {
     }
 }
 
-def parse(String description) {
-    logTrace "parse(${description})"
-    try {
-        isCorrectParent()
-        // Currently a no-op, but adding parent check for consistency
-        logDebug "Parse called with description: ${description}"
-    } catch (IllegalStateException e) {
-        log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
-    }
-}
-
 /***************************************************************************
  * Handlers for Driver Data
  ***************************************************************************/
