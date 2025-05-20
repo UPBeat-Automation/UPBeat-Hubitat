@@ -307,6 +307,9 @@ def handleDeviceEvent(String eventSource, String eventType, int networkId, int s
             logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
             return
         }
+
+        int level = messageArgs.size() > 0 ? Math.min(messageArgs[0], 100) : 0
+
         // Map level to fan speed
         def speed
         if (level == 0) {
