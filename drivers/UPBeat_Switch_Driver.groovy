@@ -133,7 +133,7 @@ def updateChannelId(Long channelId) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def refresh() {
-    logDebug "refresh()"
+    logTrace "refresh()"
     try {
         isCorrectParent()
         byte[] data = getParent().buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())

@@ -167,7 +167,7 @@ def updateChannelId(Long channelId) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def refresh() {
-    logDebug "refresh()"
+    logTrace "refresh()"
     try {
         isCorrectParent()
         byte[] data = getParent().buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
@@ -190,9 +190,10 @@ def refresh() {
 }
 
 def flash(BigDecimal rateToFlash) {
-    logDebug "Flash Rate [${rateToFlash}]"
+    logTrace "flash(${rateToFlash})"
     try {
         isCorrectParent()
+        logDebug "Flash Rate [${rateToFlash}]"
         byte[] data = getParent().blinkCommand(settings.networkId.intValue(), settings.deviceId.intValue(), rateToFlash, settings.channelId.intValue())
         logDebug "UPB Flash Command[${data}]"
         if (getParent().sendPimMessage(data)) {
