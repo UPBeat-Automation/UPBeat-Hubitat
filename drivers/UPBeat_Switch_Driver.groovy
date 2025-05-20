@@ -157,7 +157,7 @@ def refresh() {
 
 def flash(BigDecimal rateToFlash) {
     logTrace "flash(${rateToFlash})"
-	
+
     try {
         isCorrectParent()
         byte[] data = getParent().blinkCommand(settings.networkId.intValue(), settings.deviceId.intValue(), rateToFlash, settings.channelId.intValue())
@@ -173,7 +173,7 @@ def flash(BigDecimal rateToFlash) {
         }
     } catch (IllegalStateException e) {
         log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)																														  
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
 }
 
