@@ -85,7 +85,6 @@ void installed() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -129,7 +128,7 @@ def updated() {
  * Handlers for Driver Data
  ***************************************************************************/
 def updateNetworkId(Long networkId) {
-    logTrace "updateNetworkId()"
+    logTrace "updateNetworkId(${networkId})"
     try {
         isCorrectParent()
         device.updateSetting("networkId", [type: "number", value: networkId])
@@ -137,12 +136,11 @@ def updateNetworkId(Long networkId) {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
 def updateDeviceId(Long deviceId) {
-    logTrace "updateDeviceId()"
+    logTrace "updateDeviceId(${deviceId})"
     try {
         isCorrectParent()
         device.updateSetting("deviceId", [type: "number", value: deviceId])
@@ -150,12 +148,11 @@ def updateDeviceId(Long deviceId) {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
 def updateChannelId(Long channelId) {
-    logTrace "updateChannelId()"
+    logTrace "updateChannelId(${channelId})"
     try {
         isCorrectParent()
         device.updateSetting("channelId", [type: "number", value: channelId])
@@ -163,7 +160,6 @@ def updateChannelId(Long channelId) {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -187,7 +183,6 @@ def refresh() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     } catch (Exception e) {
         logWarn "Call to refresh failed: ${e.message}"
         sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
@@ -213,12 +208,11 @@ def flash(BigDecimal rateToFlash) {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
 def on() {
-    logDebug "Sending ON to device [${settings.deviceId}]"
+    logTrace "on()"
     try {
         isCorrectParent()
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
@@ -238,7 +232,6 @@ def on() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     } catch (Exception e) {
         logWarn "Call to on failed: ${e.message}"
         sendEvent(name: "status", value: "error", descriptionText: "On command failed: ${e.message}", isStateChange: true)
@@ -246,7 +239,7 @@ def on() {
 }
 
 def off() {
-    logDebug "Sending OFF to device [${settings.deviceId}]"
+    logTrace "off()"
     try {
         isCorrectParent()
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
@@ -266,7 +259,6 @@ def off() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     } catch (Exception e) {
         logWarn "Call to off failed: ${e.message}"
         sendEvent(name: "status", value: "error", descriptionText: "Off command failed: ${e.message}", isStateChange: true)
@@ -274,7 +266,7 @@ def off() {
 }
 
 def setLevel(value, duration = null) {
-    logDebug "Sending Set-Percent to device [${settings.deviceId}] with level [${value}] and duration [${duration}]"
+    logTrace "setLevel(${value}, ${duration})"
     try {
         isCorrectParent()
         // Validate and clamp level
@@ -364,7 +356,6 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -388,6 +379,5 @@ def handleDeviceEvent(String eventSource, String eventType, int networkId, int s
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }

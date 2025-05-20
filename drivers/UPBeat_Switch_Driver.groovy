@@ -221,7 +221,6 @@ def off() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     } catch (Exception e) {
         logWarn "Call to off failed: ${e.message}"
         sendEvent(name: "status", value: "error", descriptionText: "Off command failed: ${e.message}", isStateChange: true)
@@ -270,7 +269,6 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -292,6 +290,5 @@ def handleDeviceEvent(String eventSource, String eventType, int networkId, int s
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
