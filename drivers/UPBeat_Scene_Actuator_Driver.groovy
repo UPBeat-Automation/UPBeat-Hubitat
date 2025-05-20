@@ -97,7 +97,7 @@ def updateLinkId(Long linkId) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def activate() {
-    logDebug("Sending Activate to scene [${settings.linkId}] on Network ID [${settings.networkId}]")
+    logTrace("activate()")
     try {
         isCorrectParent()
         if (settings.networkId == null || settings.linkId == null) {
@@ -107,6 +107,7 @@ def activate() {
         }
         def networkId = settings.networkId.intValue()
         def linkId = settings.linkId.intValue()
+        logDebug("Sending Activate to scene [${linkId}] on Network ID [${networkId}]")
         byte[] data = getParent().buildSceneActivateCommand(networkId, linkId, 0)
         logDebug("UPB Command Activate [${data}]")
         if (getParent().sendPimMessage(data)) {
@@ -127,7 +128,7 @@ def activate() {
 }
 
 def deactivate() {
-    logDebug("Sending Deactivate to scene [${settings.linkId}] on Network ID [${settings.networkId}]")
+    logTrace "deactivate()"
     try {
         isCorrectParent()
         if (settings.networkId == null || settings.linkId == null) {
@@ -137,6 +138,7 @@ def deactivate() {
         }
         def networkId = settings.networkId.intValue()
         def linkId = settings.linkId.intValue()
+        logDebug("Sending Deactivate to scene [${linkId}] on Network ID [${networkId}]")
         byte[] data = getParent().buildSceneDeactivateCommand(networkId, linkId, 0)
         logDebug("UPB Command Deactivate [${data}]")
         if (getParent().sendPimMessage(data)) {
