@@ -241,7 +241,7 @@ def updateChannelId(Long channelId) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def refresh() {
-    logDebug "refresh()"
+    logTrace "refresh()"
     try {
         isCorrectParent()
         byte[] data = getParent().buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
@@ -264,9 +264,10 @@ def refresh() {
 }
 
 def on() {
-    logDebug "Sending ON to device [${settings.deviceId}]"
+    logTrace "on()"
     try {
         isCorrectParent()
+        logDebug "Sending ON to device [${settings.deviceId}]"
         setSpeed("high")
     } catch (IllegalStateException e) {
         log.error e.message
@@ -275,9 +276,10 @@ def on() {
 }
 
 def off() {
-    logDebug "Sending OFF to device [${settings.deviceId}]"
+    logTrace "off()"
     try {
         isCorrectParent()
+        logDebug "Sending OFF to device [${settings.deviceId}]"
         setSpeed("off")
     } catch (IllegalStateException e) {
         log.error e.message
@@ -302,7 +304,7 @@ def cycleSpeed() {
 }
 
 def setSpeed(String speed) {
-    logDebug "setSpeed(${speed})"
+    logTrace "setSpeed(${speed})"
     try {
         isCorrectParent()
         if (!SUPPORTED_SPEEDS.contains(speed)) {
@@ -335,8 +337,8 @@ def setSpeed(String speed) {
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
-def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
-    logDebug "Received UPB scene command for ${device.deviceNetworkId}: Link ID ${linkId}"
+def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+    logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
         def receiveComponents = [:]
@@ -363,9 +365,8 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
 }
-
-def handleDeviceEvent(int level, int networkId, int sourceId, int destinationId, List args) {
-    logTrace "handleDeviceState(level=${level}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${args})"
+def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
+    logTrace "handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})"
     try {
         isCorrectParent()
         if (settings.networkId != networkId || settings.deviceId != destinationId) {
