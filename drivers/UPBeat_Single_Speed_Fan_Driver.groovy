@@ -276,25 +276,38 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
     logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
+        // Retrieve and deserialize the receiveComponents map from data
         def receiveComponents = [:]
         def jsonData = device.getDataValue("receiveComponents")
         if (jsonData) {
             receiveComponents = new JsonSlurper().parseText(jsonData)
         }
 
+        // Use the linkId as the key (no padding)
         def linkIdKey = linkId.toString()
         def component = receiveComponents?.get(linkIdKey)
-
         if (component) {
-            def level = component.level
-            def rate = component.rate
-            def slot = component.slot
-            logDebug "Executing action for Link ID ${linkId} (Slot ${slot}): Level=${level}, Rate=${rate}"
-            def speed = (level == 0) ? "off" : "high"
-            setSpeed(speed)
-            logDebug "Rate ${rate} not fully implemented; action applied instantly"
+            switch(eventType){
+                case "activate":
+                    def speed = (component.level == 0) ? "off" : "high"
+                    def switchValue = (component.level == 0) ? "off" : "on"
+                    sendEvent(name: "switch", value: switchValue, isStateChange: true)
+                    sendEvent(name: "speed", value: speed, isStateChange: true)
+                    break
+                case "deactivate":
+                    sendEvent(name: "switch", value: "off", isStateChange: true)
+                    sendEvent(name: "speed", value: "off", isStateChange: true)
+                    break
+                default:
+                    sendEvent(name: "status", value: "error", descriptionText: "Unknown event type eventType=${eventType}", isStateChange: true)
+                    return
+                    break
+            }
+            sendEvent(name: "lastReceivedLinkId", value: linkId)
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "No action defined for Link ID ${linkId}. Check receive link configuration."
+            logDebug "No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration."
+            sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         }
     } catch (IllegalStateException e) {
