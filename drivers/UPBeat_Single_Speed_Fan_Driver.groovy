@@ -7,6 +7,7 @@
  */
 #include UPBeat.UPBeatLogger
 #include UPBeat.UPBeatLib
+#include UPBeat.UPBeatDriverLib
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -55,81 +56,6 @@ metadata {
 @Field static final List SUPPORTED_SPEEDS = ["off", "high"]
 
 /***************************************************************************
- * Helper Functions
- ***************************************************************************/
-private void isCorrectParent() {
-    def parentApp = getParent()
-    if (!parentApp || parentApp.name != "UPBeat App") {
-        throw new IllegalStateException("${device.name ?: 'Device'} must be created by the UPBeat App. Manual creation is not supported.")
-    }
-}
-
-def getReceiveComponents() {
-    def components = [:]
-    def hasErrors = false
-    def isDimmable = device.hasCapability("SwitchLevel")
-    (1..16).each { slot ->
-        def slotInput = settings."receiveComponent${slot}"?.trim()
-        if (slotInput) {
-            def parts = slotInput.split(":")
-            if (parts.size() < 2 || parts.size() > 3) {
-                logWarn "Invalid format in receiveComponent${slot}: ${slotInput}. Expected linkID:level, setting value removed"
-                device.updateSetting("receiveComponent${slot}", "")
-                hasErrors = true
-                return
-            }
-            try {
-                def linkId = parts[0].toInteger()
-                def level = parts[1].toInteger()
-                if (linkId < 1 || linkId > 250) {
-                    logWarn "Invalid linkId in receiveComponent${slot}: ${linkId}. Must be 1-250, setting value removed"
-                    device.updateSetting("receiveComponent${slot}", "")
-                    hasErrors = true
-                    return
-                }
-                if (isDimmable) {
-                    if (level < 0 || level > 100) {
-                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0-100 for dimmable device, setting value removed"
-                        device.updateSetting("receiveComponent${slot}", "")
-                        hasErrors = true
-                        return
-                    }
-                } else {
-                    if (level != 0 && level != 100) {
-                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0 or 100 for non-dimmable device, setting value removed"
-                        device.updateSetting("receiveComponent${slot}", "")
-                        hasErrors = true
-                        return
-                    }
-                }
-                def linkIdKey = linkId.toString()
-                if (components.containsKey(linkIdKey)) {
-                    logWarn "Duplicate linkId ${linkId} in receiveComponent${slot}, setting value removed"
-                    device.updateSetting("receiveComponent${slot}", "")
-                    hasErrors = true
-                    return
-                }
-                components[linkIdKey] = [level: level]
-            } catch (NumberFormatException e) {
-                logWarn "Invalid number format in receiveComponent${slot}: ${slotInput}, setting value removed"
-                device.updateSetting("receiveComponent${slot}", "")
-                hasErrors = true
-            } catch (Exception e) {
-                logWarn "Unexpected error in receiveComponent${slot}: ${e.message}, setting value removed"
-                device.updateSetting("receiveComponent${slot}", "")
-                hasErrors = true
-            }
-        }
-    }
-    if (hasErrors) {
-        sendEvent(name: "status", value: "error", descriptionText: "Invalid receiveComponents detected; check logs and verify settings", isStateChange: true)
-    } else if (device.currentValue("status") != "ok") {
-        sendEvent(name: "status", value: "ok", descriptionText: "All receiveComponents valid", isStateChange: true)
-    }
-    return components
-}
-
-/***************************************************************************
  * Core Driver Functions
  ***************************************************************************/
 void installed() {
@@ -174,17 +100,6 @@ def updated() {
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
         logWarn "Failed to update: ${e.message}"
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-    }
-}
-
-def parse(String description) {
-    logTrace "parse(${description})"
-    try {
-        isCorrectParent()
-        logDebug "Parse called with description: ${description}"
-    } catch (IllegalStateException e) {
-        log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
 }
@@ -255,9 +170,10 @@ def refresh() {
 }
 
 def on() {
-    logDebug "Sending ON to device [${settings.deviceId}]"
+	logTrace "on()"
     try {
         isCorrectParent()
+		logDebug "Sending ON to device [${settings.deviceId}]"
         byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
         if (getParent().sendPimMessage(data)) {
@@ -280,9 +196,10 @@ def on() {
 }
 
 def off() {
-    logDebug "Sending OFF to device [${settings.deviceId}]"
+    logTrace "off()"
     try {
         isCorrectParent()
+		logDebug "Sending OFF to device [${settings.deviceId}]"
         byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, settings.channelId.intValue())
         logDebug "UPB Command Goto [${data}]"
         if (getParent().sendPimMessage(data)) {
@@ -355,8 +272,8 @@ def setSpeed(String speed) {
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
-def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
-    logDebug "Received UPB scene command for ${device.deviceNetworkId}: Link ID ${linkId}"
+def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+    logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
         def receiveComponents = [:]
@@ -386,17 +303,22 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
     }
 }
 
-def handleDeviceEvent(int level, int networkId, int sourceId, int destinationId, List args) {
-    logTrace "handleDeviceState(level=${level}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${args})"
+def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
+    logTrace "handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})"
     try {
         isCorrectParent()
         if (settings.networkId != networkId || settings.deviceId != destinationId) {
             logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
             return
         }
+		
+		int level = messageArgs.size() > 0 ? Math.min(messageArgs[0], 100) : 0
+		
         def speed = (level == 0) ? "off" : "high"
-        logDebug "Updating switch to ${(speed == "off") ? "off" : "on"} and speed to ${speed} for device [${settings.deviceId}]"
-        sendEvent(name: "switch", value: (speed == "off") ? "off" : "on", isStateChange: true)
+		def switchValue = (level == 0) ? "off" : "on"
+		
+        logDebug "Updating switch to ${switchValue} and speed to ${speed} for device [${settings.deviceId}]"
+        sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "speed", value: speed, isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
