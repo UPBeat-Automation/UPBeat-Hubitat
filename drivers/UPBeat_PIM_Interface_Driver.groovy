@@ -130,7 +130,6 @@ def installed() {
     } catch (IllegalStateException e) {
         log.error e.message
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -147,7 +146,6 @@ def uninstalled() {
     } catch (IllegalStateException e) {
         log.error e.message
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -161,7 +159,6 @@ def updated() {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -190,12 +187,10 @@ def initialize() {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     } catch (Exception e) {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -218,7 +213,6 @@ def socketStatus(message) {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -312,7 +306,6 @@ def parse(hexMessage) {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -377,7 +370,6 @@ def reconnectSocket() {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -404,7 +396,6 @@ def setIPAddress(String ipAddress) {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
@@ -419,7 +410,6 @@ def setPortNumber(int portNumber) {
         log.error e.message
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
-        return
     }
 }
 
