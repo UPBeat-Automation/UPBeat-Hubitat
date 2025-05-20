@@ -116,17 +116,6 @@ def updated() {
     }
 }
 
-def parse(String description) {
-    logTrace "parse(${description})"
-    try {
-        isCorrectParent()
-        logDebug "Parse called with description: ${description}"
-    } catch (IllegalStateException e) {
-        log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-    }
-}
-
 /***************************************************************************
  * Handlers for Driver Data
  ***************************************************************************/
@@ -266,27 +255,43 @@ def setSpeed(String speed) {
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
-def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+ def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
     logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
+		
         def receiveComponents = [:]
         def jsonData = device.getDataValue("receiveComponents")
         if (jsonData) {
             receiveComponents = new JsonSlurper().parseText(jsonData)
         }
-
+		
         def linkIdKey = linkId.toString()
         def component = receiveComponents?.get(linkIdKey)
-
+		
         if (component) {
-            def level = component.level
-            def slot = component.slot
-            logDebug "Executing action for Link ID ${linkId} (Slot ${slot}): Level=${level}"
-            def speed = levelToSpeed(level)
-            setSpeed(speed)
+            switch(eventType){
+                case "activate":
+					def switchValue = (component.level == 0) ? "off" : "on"
+					def speed = levelToSpeed(component.level)
+					sendEvent(name: "switch", value: switchValue, isStateChange: true)
+                    sendEvent(name: "speed", value: speed, isStateChange: true)
+					setSpeed(speed)
+                    break
+                case "deactivate":
+                    sendEvent(name: "switch", value: "off", isStateChange: true)
+                    sendEvent(name: "speed", value: "off", isStateChange: true)
+                    break
+                default:
+                    sendEvent(name: "status", value: "error", descriptionText: "Unknown event type eventType=${eventType}", isStateChange: true)
+                    return
+                    break
+            }
+            sendEvent(name: "lastReceivedLinkId", value: linkId)
+            sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "No action defined for Link ID ${linkId}. Check receive link configuration."
+            logDebug "No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration."
+            sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         }
     } catch (IllegalStateException e) {
@@ -294,7 +299,6 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
 }
-
 def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
     logTrace "handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})"
     try {
