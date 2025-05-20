@@ -255,28 +255,28 @@ def setSpeed(String speed) {
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
- def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
     logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
-		
+
         def receiveComponents = [:]
         def jsonData = device.getDataValue("receiveComponents")
         if (jsonData) {
             receiveComponents = new JsonSlurper().parseText(jsonData)
         }
-		
+
         def linkIdKey = linkId.toString()
         def component = receiveComponents?.get(linkIdKey)
-		
+
         if (component) {
             switch(eventType){
                 case "activate":
-					def switchValue = (component.level == 0) ? "off" : "on"
-					def speed = levelToSpeed(component.level)
-					sendEvent(name: "switch", value: switchValue, isStateChange: true)
+                    def switchValue = (component.level == 0) ? "off" : "on"
+                    def speed = levelToSpeed(component.level)
+                    sendEvent(name: "switch", value: switchValue, isStateChange: true)
                     sendEvent(name: "speed", value: speed, isStateChange: true)
-					setSpeed(speed)
+                    setSpeed(speed)
                     break
                 case "deactivate":
                     sendEvent(name: "switch", value: "off", isStateChange: true)
