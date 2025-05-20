@@ -7,6 +7,7 @@
 */
 #include UPBeat.UPBeatLogger
 #include UPBeat.UPBeatLib
+#include UPBeat.UPBeatDriverLib
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -39,81 +40,6 @@ metadata {
         input name: "receiveComponent15", type: "text", title: "Receive Component 15", description: "Format: linkId:level"
         input name: "receiveComponent16", type: "text", title: "Receive Component 16", description: "Format: linkId:level"
     }
-}
-
-/***************************************************************************
- * Helper Functions
- ***************************************************************************/
-private void isCorrectParent() {
-    def parentApp = getParent()
-    if (!parentApp || parentApp.name != "UPBeat App") {
-        throw new IllegalStateException("${device.name ?: 'Device'} must be created by the UPBeat App. Manual creation is not supported.")
-    }
-}
-
-def getReceiveComponents() {
-    def components = [:]
-    def hasErrors = false
-    def isDimmable = device.hasCapability("SwitchLevel")
-    (1..16).each { slot ->
-        def slotInput = settings."receiveComponent${slot}"?.trim()
-        if (slotInput) {
-            def parts = slotInput.split(":")
-            if (parts.size() < 2 || parts.size() > 3) {
-                logWarn "Invalid format in receiveComponent${slot}: ${slotInput}. Expected linkID:level, setting value removed"
-                device.updateSetting("receiveComponent${slot}", "")
-                hasErrors = true
-                return
-            }
-            try {
-                def linkId = parts[0].toInteger()
-                def level = parts[1].toInteger()
-                if (linkId < 1 || linkId > 250) {
-                    logWarn "Invalid linkId in receiveComponent${slot}: ${linkId}. Must be 1-250, setting value removed"
-                    device.updateSetting("receiveComponent${slot}", "")
-                    hasErrors = true
-                    return
-                }
-                if (isDimmable) {
-                    if (level < 0 || level > 100) {
-                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0-100 for dimmable device, setting value removed"
-                        device.updateSetting("receiveComponent${slot}", "")
-                        hasErrors = true
-                        return
-                    }
-                } else {
-                    if (level != 0 && level != 100) {
-                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0 or 100 for non-dimmable device, setting value removed"
-                        device.updateSetting("receiveComponent${slot}", "")
-                        hasErrors = true
-                        return
-                    }
-                }
-                def linkIdKey = linkId.toString()
-                if (components.containsKey(linkIdKey)) {
-                    logWarn "Duplicate linkId ${linkId} in receiveComponent${slot}, setting value removed"
-                    device.updateSetting("receiveComponent${slot}", "")
-                    hasErrors = true
-                    return
-                }
-                components[linkIdKey] = [level: level]
-            } catch (NumberFormatException e) {
-                logWarn "Invalid number format in receiveComponent${slot}: ${slotInput}, setting value removed"
-                device.updateSetting("receiveComponent${slot}", "")
-                hasErrors = true
-            } catch (Exception e) {
-                logWarn "Unexpected error in receiveComponent${slot}: ${e.message}, setting value removed"
-                device.updateSetting("receiveComponent${slot}", "")
-                hasErrors = true
-            }
-        }
-    }
-    if (hasErrors) {
-        sendEvent(name: "status", value: "error", descriptionText: "Invalid receiveComponents detected; check logs and verify settings", isStateChange: true)
-    } else if (device.currentValue("status") != "ok") {
-        sendEvent(name: "status", value: "ok", descriptionText: "All receiveComponents valid", isStateChange: true)
-    }
-    return components
 }
 
 /***************************************************************************
@@ -162,19 +88,6 @@ def updated() {
     } catch (Exception e) {
         logWarn "Failed to update: ${e.message}"
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-    }
-}
-
-def parse(String description) {
-    logTrace "parse(${description})"
-    try {
-        isCorrectParent()
-        // Currently a no-op, but adding parent check for consistency
-        logDebug "Parse called with description: ${description}"
-    } catch (IllegalStateException e) {
-        log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -324,8 +237,8 @@ def off() {
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
-def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
-    logDebug "Received UPB scene command for ${device.deviceNetworkId}: Link ID ${linkId}"
+def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
+    logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
     try {
         isCorrectParent()
         // Retrieve and deserialize the receiveComponents map from data
@@ -338,15 +251,20 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
         // Use the linkId as the key (no padding)
         def linkIdKey = linkId.toString()
         def component = receiveComponents?.get(linkIdKey)
-
         if (component) {
             def level = component.level
             def slot = component.slot
-            logDebug "Executing action for Link ID ${linkId} (Slot ${slot}) on ${device.deviceNetworkId}: Level=${level}"
-            if (level == 0) {
-                sendEvent(name: "switch", value: "off")
-            } else {
-                sendEvent(name: "switch", value: "on")
+            switch(eventType){
+                case "activate":
+                    sendEvent(name: "switch", value: (level == 0) ? "off" : "on")
+                    break
+                case "deactivate":
+                    sendEvent(name: "switch", value: "off")
+                    break
+                default:
+                    sendEvent(name: "status", value: "error", descriptionText: "Unknown event type eventType=${eventType}", isStateChange: true)
+                    return
+                    break
             }
             sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
@@ -362,14 +280,17 @@ def handleLinkEvent(String eventType, int networkId, int sourceId, int linkId) {
     }
 }
 
-def handleDeviceEvent(int level, int networkId, int sourceId, int destinationId, List args) {
-    logTrace "handleDeviceState(level=${level}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${args})"
+def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
+    logTrace "handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})"
     try {
         isCorrectParent()
         if (settings.networkId != networkId || settings.deviceId != destinationId) {
             logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
             return
         }
+
+        int level = messageArgs.size() > 0 ? Math.min(messageArgs[0], 100) : 0
+
         def switchValue = (level == 0) ? "off" : "on"
         logDebug "Updating switch to ${switchValue} for device [${settings.deviceId}]"
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
