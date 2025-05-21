@@ -85,30 +85,3 @@ def getReceiveComponents() {
     }
     return components
 }
-
-def sendLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
-    logTrace "sendLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId})"
-    def eventData = [
-            eventSource: eventSource,
-            eventType: eventType,
-            networkId: networkId,
-            sourceId: sourceId,
-            linkId: linkId,
-    ]
-    sendEvent(name: "linkEvent", value: new groovy.json.JsonOutput().toJson(eventData), isStateChange: true)
-    deleteCurrentState('linkEvent')
-}
-
-def sendDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
-    logTrace "sendDeviceEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, destinationId: ${destinationId}, messageArgs: ${messageArgs})"
-    def eventData = [
-            eventSource: eventSource,
-            eventType: eventType,
-            networkId: networkId,
-            sourceId: sourceId,
-            destinationId: destinationId,
-            messageArgs: messageArgs,
-    ]
-    sendEvent(name: "deviceEvent", value: new groovy.json.JsonOutput().toJson(eventData), isStateChange: true)
-    deleteCurrentState('deviceEvent')
-}
