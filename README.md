@@ -1,4 +1,5 @@
 # UPBeat Hubitat Drivers
+![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/UPBeat-Automation/UPBeat-Hubitat/latest/total)
 
 A collection of Hubitat drivers for Universal Powerline Bus controls.
 
