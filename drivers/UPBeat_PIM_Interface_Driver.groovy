@@ -293,7 +293,8 @@ def parse(hexMessage) {
                 break
             case "PU":
                 logDebug "upb_report_message"
-                parseMessageReport(messageData)
+                // Dispatch to external thread, to prevent blocking
+                runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
                 break
             default:
                 logError "Unknown message type: ${messageType}"
@@ -516,6 +517,20 @@ def transmitMessage(byte[] bytes) {
         }
 
         return responseEntry.response == 'PA'
+    }
+}
+
+def asyncParseMessageReport(Map data) {
+    logTrace "asyncParseMessageReport(${data})"
+    try {
+        def messageData = data?.messageData
+        if (messageData) {
+            parseMessageReport(messageData.collect { it as byte } as byte[])
+        } else {
+            logWarn "No message data in asyncParseMessageReport"
+        }
+    } catch (Exception e) {
+        logError "Error in asyncParseMessageReport: ${e.message}"
     }
 }
 
