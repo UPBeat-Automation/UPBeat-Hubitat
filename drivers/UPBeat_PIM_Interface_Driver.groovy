@@ -673,16 +673,16 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
     def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
     switch(messageDataId) {
         case UPB_ACTIVATE_LINK:
-            logInfo "Generate linkEvent: activate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            logInfo "Handleing linkEvent: activate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
             getParent().handleLinkEvent("pim","activate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_DEACTIVATE_LINK:
-            logInfo "Generate linkEvent: deactivate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            logInfo "Handleing linkEvent: deactivate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
             getParent().handleLinkEvent("pim","deactivate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_GOTO:
             int[] args = messageArgs.collect { it & 0xFF } as int[]
-            logInfo "Generate deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
+            logInfo "Handleing deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
             getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_FADE_START:
@@ -729,7 +729,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                 return
             }
             int[] args = messageArgs.collect { it & 0xFF } as int[]
-            logInfo "Generate deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
+            logInfo "Handleing deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
             getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_DEVICE_STATUS:
