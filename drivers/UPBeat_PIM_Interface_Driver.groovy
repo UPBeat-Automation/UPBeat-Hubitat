@@ -675,18 +675,15 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
         case UPB_ACTIVATE_LINK:
             logInfo "Generate linkEvent: activate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
             getParent().handleLinkEvent("pim","activate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
-            //sendLinkEvent("pim","activate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_DEACTIVATE_LINK:
             logInfo "Generate linkEvent: deactivate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
             getParent().handleLinkEvent("pim","deactivate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
-            //sendLinkEvent("pim","deactivate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_GOTO:
             int[] args = messageArgs.collect { it & 0xFF } as int[]
             logInfo "Generate deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
             getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
-            //sendDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_FADE_START:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
@@ -734,7 +731,6 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
             int[] args = messageArgs.collect { it & 0xFF } as int[]
             logInfo "Generate deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
             getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
-            //sendDeviceEvent("pim","state_report",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF, args)
             break
         case UPB_DEVICE_STATUS:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
