@@ -36,7 +36,6 @@ void installed() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -55,12 +54,20 @@ def updated() {
             sendEvent(name: "status", value: "error", descriptionText: "Link ID must be between 1 and 250", isStateChange: true)
             return
         }
+        // Update parent device settings this will updated the device ID
+        def result = parent.updateDeviceSettings(device, settings)
+        if (result.success) {
+            sendEvent(name: "status", value: "ok", isStateChange: false)
+        } else {
+            logError "Failed to update device: ${result.error}"
+            sendEvent(name: "status", value: "error", descriptionText: result.error, isStateChange: true)
+            return
+        }
         state.clear()
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -76,7 +83,6 @@ def updateNetworkId(Long networkId) {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -89,7 +95,6 @@ def updateLinkId(Long linkId) {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
 
@@ -120,7 +125,6 @@ def activate() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     } catch (Exception e) {
         logWarn("Call to scene activate failed: ${e.message}")
         sendEvent(name: "status", value: "error", descriptionText: "Scene activate failed: ${e.message}", isStateChange: true)
@@ -151,7 +155,6 @@ def deactivate() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     } catch (Exception e) {
         logWarn("Call to scene deactivate failed: ${e.message}")
         sendEvent(name: "status", value: "error", descriptionText: "Scene deactivate failed: ${e.message}", isStateChange: true)
@@ -173,16 +176,16 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         String timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
         switch (eventType) {
             case "activate":
-
+                logDebug "Activating scene [${settings.linkId}] due to Link Event"
                 def lastTriggerValue = "Activated at ${timestamp} by ${(eventSource == "user") ? eventSource :  sourceId}"
+                logDebug "${lastTriggerValue}"
                 sendEvent(name: "lastTrigger", value: lastTriggerValue)
-                logInfo "Scene last trigger updated: ${lastTriggerValue}"
                 success = true
                 break
             case "deactivate":
+                logDebug "Deactivating scene [${settings.linkId}] due to Link Event"
                 def lastTriggerValue = "Deactivated at ${timestamp} by ${(eventSource == "user") ? eventSource :  sourceId}"
                 sendEvent(name: "lastTrigger", value: lastTriggerValue)
-                logInfo "Scene last trigger updated: ${lastTriggerValue}"
                 success = true
                 break
             default:
@@ -196,6 +199,5 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        return
     }
 }
