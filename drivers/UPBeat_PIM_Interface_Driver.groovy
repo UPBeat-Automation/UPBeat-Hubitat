@@ -571,8 +571,14 @@ def parseMessageReport(byte[] data) {
 
     byte messageSetId = (messageDataId >> 5) & 0x07
     byte messageIdByte = messageDataId & 0x1F
-    byte[] messageArgs = messageContent[1..-1]
-    def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
+
+    // Initialize messageArgs as an empty byte array
+    byte[] messageArgs = new byte[0]
+    def argsHex = []
+    if (messageContent.size() > 1) {
+        messageArgs = messageContent[1..-1]
+        argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
+    }
     logDebug "[${messageDataString}]: MDA=${argsHex}"
 
     switch(messageSetId) {
@@ -673,17 +679,17 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
     def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
     switch(messageDataId) {
         case UPB_ACTIVATE_LINK:
-            logInfo "Handleing linkEvent: activate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
-            getParent().handleLinkEvent("pim","activate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
+            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_DEACTIVATE_LINK:
-            logInfo "Handleing linkEvent: deactivate, networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
-            getParent().handleLinkEvent("pim","deactivate",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
+            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_GOTO:
             int[] args = messageArgs.collect { it & 0xFF } as int[]
-            logInfo "Handleing deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
-            getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
+            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
+            getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_FADE_START:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
@@ -723,14 +729,13 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
             break
         case UPB_DEVICE_STATE:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
             if (messageArgs.size() < 1) {
                 logError "[${messageDataString}]: No state data in Device State Report"
                 return
             }
             int[] args = messageArgs.collect { it & 0xFF } as int[]
-            logInfo "Handleing deviceEvent: networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
-            getParent().handleDeviceEvent("pim","goto",networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
+            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
+            getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_DEVICE_STATUS:
             logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
