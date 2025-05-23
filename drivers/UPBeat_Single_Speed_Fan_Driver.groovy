@@ -288,13 +288,13 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         def component = receiveComponents?.get(linkIdKey)
         if (component) {
             switch(eventType){
-                case "activate":
+                case "UPB_ACTIVATE_LINK":
                     def speed = (component.level == 0) ? "off" : "high"
                     def switchValue = (component.level == 0) ? "off" : "on"
                     sendEvent(name: "switch", value: switchValue, isStateChange: true)
                     sendEvent(name: "speed", value: speed, isStateChange: true)
                     break
-                case "deactivate":
+                case "UPB_DEACTIVATE_LINK":
                     sendEvent(name: "switch", value: "off", isStateChange: true)
                     sendEvent(name: "speed", value: "off", isStateChange: true)
                     break

@@ -329,7 +329,7 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
             def level = component.level
             def slot = component.slot
             switch(eventType){
-                case "activate":
+                case "UPB_ACTIVATE_LINK":
                     if (level == 0) {
                         sendEvent(name: "switch", value: "off")
                         sendEvent(name: "level", value: level)
@@ -338,7 +338,7 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
                         sendEvent(name: "level", value: level)
                     }
                     break
-                case "deactivate":
+                case "UPB_DEACTIVATE_LINK":
                     sendEvent(name: "switch", value: "off")
                     sendEvent(name: "level", value: 0)
                     break
