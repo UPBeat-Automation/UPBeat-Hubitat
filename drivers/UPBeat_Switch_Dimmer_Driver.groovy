@@ -152,7 +152,7 @@ def updateDeviceId(int deviceId) {
 }
 
 def updateChannelId(int channelId) {
-    log.trace "updateChannelId(${channelId})"
+    logTrace "updateChannelId(${channelId})"
     try {
         isCorrectParent()
         device.updateSetting("channelId", [type: "number", value: channelId])
