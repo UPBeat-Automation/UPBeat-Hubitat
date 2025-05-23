@@ -19,27 +19,32 @@ library (
 @Field static final int LOG_DEFAULT_LEVEL = 0
 
 void logError(message) {
-    if (logLevel?.toInteger()>=1) log.error message
+    if (logLevel.toInteger()>=1) log.error message
+    //log.error message
 }
 void logWarn(message) {
-    if (logLevel?.toInteger()>=2) log.warn message
+    if (logLevel.toInteger()>=2) log.warn message
+    //log.warn message
 }
 void logInfo(message) {
-    if (logLevel?.toInteger()>=3) log.info message
+    if (logLevel.toInteger()>=3) log.info message
+    //log.info message
 }
 void logDebug(message) {
-    if (logLevel?.toInteger()>=4) log.debug message
+    if (logLevel.toInteger()>=4) log.debug message
+    //log.debug message
 }
 void logTrace(message) {
-    if (logLevel?.toInteger()>=5) log.trace message
+    if (logLevel.toInteger()>=5) log.trace message
+    //log.trace message
 }
 
 
 static Map createLogger(log) {
-        def loggerMap = [
+    def loggerMap = [
             log: null,
             logLevel: LOG_DEFAULT_LEVEL,
-            
+
             setLogger: { logger ->
                 delegate.log = logger
             },
@@ -47,7 +52,7 @@ static Map createLogger(log) {
             getLogger: {
                 return delegate.log
             },
-            
+
             setLogLevel: { int level ->
                 delegate.logLevel = level
             },
@@ -85,14 +90,14 @@ static Map createLogger(log) {
                     delegate.log.trace message
                 }
             }
-        ]
+    ]
 
-        loggerMap.each { key, value ->
-            if (value instanceof Closure) {
-                value.delegate = loggerMap
-                value.resolveStrategy = Closure.DELEGATE_FIRST
-            }
+    loggerMap.each { key, value ->
+        if (value instanceof Closure) {
+            value.delegate = loggerMap
+            value.resolveStrategy = Closure.DELEGATE_FIRST
         }
+    }
 
-        return loggerMap
+    return loggerMap
 }
