@@ -143,6 +143,18 @@ def updateChannelId(Long channelId) {
     }
 }
 
+def updateReceiveComponentSlot(int slot, int linkId, int level) {
+    logTrace "updateReceiveComponentSlot(${slot})"
+    try {
+        isCorrectParent()
+        device.updateSetting("receiveComponent${slot}", [type: "string", value: "${linkId}:${level}"])
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    }
+}
+
 /***************************************************************************
  * Handlers for Driver Capabilities
  ***************************************************************************/
