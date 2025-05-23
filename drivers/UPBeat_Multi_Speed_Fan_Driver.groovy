@@ -24,8 +24,8 @@ metadata {
     preferences {
         input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
         input name: "networkId", type: "number", title: "Network ID", description: "UPB Network ID (0-255)", required: true, range: "0..255"
-        input name: "deviceId", type: "number", title: "Device ID", description: "UPB Device ID (0-255)", required: true, range: "0..255"
-        input name: "channelId", type: "number", title: "Channel ID", description: "UPB Channel ID (0-255)", required: true, range: "0..255"
+        input name: "deviceId", type: "number", title: "Device ID", description: "UPB Device ID (1-250)", required: true, range: "1..250"
+        input name: "channelId", type: "number", title: "Channel ID", description: "UPB Channel ID (1-255)", required: true, range: "1..255"
         input name: "receiveComponent1", type: "text", title: "Receive Component 1", description: "Format: linkId:level"
         input name: "receiveComponent2", type: "text", title: "Receive Component 2", description: "Format: linkId:level"
         input name: "receiveComponent3", type: "text", title: "Receive Component 3", description: "Format: linkId:level"
@@ -299,16 +299,37 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
 }
-def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
+
+def handleGotoEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int level, int rate, int channel)
+{
+    logTrace "handleGotoEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, level=${level}, rate=${rate}, channel=${channel})"
+    try {
+        isCorrectParent()
+        // Map level to fan speed
+        def speed
+        if (level == 0) {
+            speed = "off"
+        } else if (level <= 33) {
+            speed = "low"
+        } else if (level <= 66) {
+            speed = "medium"
+        } else {
+            speed = "high"
+        }
+        logDebug "Updating switch to ${(speed == "off") ? "off" : "on"} and speed to ${speed} for device [${settings.deviceId}]"
+        setSpeed(speed)
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    }
+}
+
+def handleDeviceStateReport(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
     logTrace "handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})"
     try {
         isCorrectParent()
-        if (settings.networkId != networkId || settings.deviceId != destinationId) {
-            logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
-            return
-        }
-
-        int level = messageArgs.size() > 0 ? Math.min(messageArgs[0], 100) : 0
+        int channel = settings.channelId.intValue() - 1
+        int level = messageArgs.size() > channel ? Math.min(messageArgs[channel], 100) : 0
 
         // Map level to fan speed
         def speed

@@ -86,6 +86,8 @@ preferences {
     page(name: "mainPage")
     page(name: "addDevicePage")
     page(name: "createDevice")
+    page(name: "bulkImportPage")
+    page(name: "bulkImport")
 }
 
 mappings {
@@ -130,6 +132,60 @@ def addDevicePage() {
                 // Dynamically render inputs based on device type
                 DEVICE_TYPES[settings.deviceType].requiredInputs.each { inputConfig ->
                     input(inputConfig + [submitOnChange: true])
+                }
+            }
+        }
+    }
+}
+
+def bulkImportPage() {
+    dynamicPage(name: "bulkImportPage", title: "Bulk Import", install: false, uninstall: false, nextPage: "bulkImport") {
+        section() {
+            input name: "upeFileData",
+                    type: "textarea",
+                    title: "UPE File Data",
+                    description: "Paste UPStart UPE file here",
+                    defaultValue: "",
+                    required: true,
+                    rows: 20,
+                    cols: 80,
+                    submitOnChange: true
+        }
+    }
+}
+
+def bulkImport() {
+    return dynamicPage(name: "bulkImport", title: "Device Import Completed", nextPage: "mainPage") {
+        section("Import Result") {
+            //paragraph "${settings.upeFileData}"
+            data = processUpeFile(settings.upeFileData)
+            deleteAllDevices()
+            paragraph new JsonBuilder(data).toPrettyString()
+
+            // Create Link Devices
+            data.links.each { link ->
+                deviceNetworkId = buildSceneNetworkId(data.systemInfo.networkId, link.linkId)
+                childDevice = addChildDevice("UPBeat", "UPB Scene Actuator" , deviceNetworkId, [name: link.name, label: link.name])
+                childDevice.updateNetworkId(data.systemInfo.networkId)
+                childDevice.updateLinkId(link.linkId)
+            }
+
+            // Create Switch Devices
+            data.modules.each { module ->
+                module.channelInfo.each { channel ->
+                    def channelId = channel.channelId + 1
+                    deviceNetworkId = buildDeviceNetworkId(module.networkId, module.moduleId, channelId)
+                    if( channel.dimEnabled ){
+                        childDevice = addChildDevice("UPBeat", "UPB Dimming Switch" , deviceNetworkId, [name: module.deviceName, label: module.deviceName])
+                        childDevice.updateNetworkId(module.networkId)
+                        childDevice.updateDeviceId(module.moduleId)
+                        childDevice.updateChannelId(channelId)
+                    } else {
+                        childDevice = addChildDevice("UPBeat", "UPB Non-Dimming Switch" , deviceNetworkId, [name: module.deviceName, label: module.deviceName])
+                        childDevice.updateNetworkId(module.networkId)
+                        childDevice.updateDeviceId(module.moduleId)
+                        childDevice.updateChannelId(channelId)
+                    }
                 }
             }
         }
@@ -281,6 +337,7 @@ def mainPage() {
         section("Devices") {
             if (app.getInstallationState() == "COMPLETE") {
                 href(name: "manualAddHref", title: "Manually Add Device", page: "addDevicePage", description: "Add a device manually")
+                href(name: "manualAddHref", title: "Bulk Import", page: "bulkImportPage", description: "Import UPStart export file")
             } else {
                 paragraph "Please save the app by clicking 'Done' before adding devices."
             }
@@ -318,20 +375,6 @@ def initialize() {
     getPimDevice()
     // Clear existing subscriptions to prevent duplicates
     unsubscribe()
-    //getChildDevices().each { device ->
-    //    try {
-    //        logInfo "Subcribing to linkEvent on device ${device.label ?: device.name}"
-    //        subscribe(device, "linkEvent", "handleLinkEvent")
-    //    } catch (Exception e) {
-    //                logWarn "Error calling subscribe on device ${device.label ?: device.name}: ${e.message}"
-    //    }
-    //    try {
-    //        logInfo "Subcribing to deviceEvent on device ${device.label ?: device.name}"
-    //        subscribe(device, "deviceEvent", "handleDeviceEvent")
-    //    } catch (Exception e) {
-    //                logWarn "Error calling subscribe on device ${device.label ?: device.name}: ${e.message}"
-    //    }
-    //}
 }
 
 /***************************************************************************
@@ -441,10 +484,12 @@ void updatePIMDevice(String ipAddress, int portNumber) {
 void deleteAllDevices() {
     logTrace "deleteAllDevices()"
     def devices = app.getChildDevices()
-    // Delete all child devices
+    // Delete all child devices except PIM
     devices.each { device ->
-        logDebug "Deleting ${device.deviceNetworkId}"
-        deleteChildDevice(device.deviceNetworkId)
+        if (device.name != "UPB Powerline Interface Module") {
+            logDebug "Deleting ${device.deviceNetworkId}"
+            deleteChildDevice(device.deviceNetworkId)
+        }
     }
 }
 
@@ -678,7 +723,6 @@ byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
     packet.write(deviceId) // Device ID
     packet.write(0x00) // Source ID (PIM)
     packet.write(0x30) // MDID (Report State Command)
-    //packet.write(channel) // Channel
 
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
     logDebug "Checksum: 0x${String.format('%02X', (short)sum & 0xFF)}"
@@ -718,12 +762,14 @@ def updateDeviceSettings(device, settings) {
         def newDeviceNetworkId
         if (deviceConfig.category == "scene") {
             if (!settings.networkId || !settings.linkId) {
+
                 logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId or linkId."
                 return [success: false, error: "Missing networkId or linkId"]
             }
             newDeviceNetworkId = buildSceneNetworkId(settings.networkId.intValue(), settings.linkId.intValue())
         } else {
             if (!settings.networkId || !settings.deviceId || !settings.channelId) {
+
                 logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId, deviceId, or channelId."
                 return [success: false, error: "Missing networkId, deviceId, or channelId"]
             }
@@ -815,22 +861,42 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
 
 def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
     logTrace "handleDeviceEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, destinationId: ${destinationId}, messageArgs: ${messageArgs})"
-    def deviceId = destinationId == 0 ? buildDeviceNetworkId(networkId, sourceId, 1) : buildDeviceNetworkId(networkId, destinationId, 1)
-    def device = getChildDevice(deviceId)
-
-    if (device == null) {
-        logWarn "No device found for ${deviceId}"
-        return
-    }
-
-    try {
-        // Broadcast packet needs to be routed to the device
-        if(destinationId == 0)
-            device.handleDeviceEvent(eventSource, eventType, networkId, destinationId, sourceId, messageArgs)
-        else
-            device.handleDeviceEvent(eventSource, eventType, networkId, sourceId, destinationId, messageArgs)
-        logDebug "Dispatched handleDeviceEvent to ${device.typeName}"
-    } catch (Exception e) {
-        logWarn "Failed to call handleDeviceEvent on ${deviceId}: ${e.message}"
+    switch(eventType){
+        case "UPB_GOTO":
+            def level = messageArgs[0]
+            def rate = messageArgs[1]
+            def channel = messageArgs[2]
+            def deviceId = buildDeviceNetworkId(networkId, destinationId, channel)
+            def device = getChildDevice(deviceId)
+            if (device == null) {
+                logWarn "No device found for ${deviceId}"
+            } else {
+                try {
+                    device.handleGotoEvent(eventSource, eventType, networkId, sourceId, destinationId, level, rate, channel)
+                } catch (Exception e) {
+                    logWarn "Failed to call handleGotoEvent on ${deviceId}: ${e.message}"
+                }
+            }
+            break;
+        case "UPB_DEVICE_STATE":
+            messageArgs.eachWithIndex { level, channel ->
+                channel = channel + 1
+                // Device report needs to be routed to the source, the destination is broadcasted
+                def deviceId = buildDeviceNetworkId(networkId, sourceId, channel)
+                def device = getChildDevice(deviceId)
+                if (device == null) {
+                    logWarn "No device found for ${deviceId}"
+                } else {
+                    try {
+                        device.handleDeviceStateReport(eventSource, eventType, networkId, destinationId, sourceId, messageArgs)
+                    } catch (Exception e) {
+                        logWarn "Failed to call handleDeviceStateReport on ${deviceId}: ${e.message}"
+                    }
+                }
+            }
+            break;
+        default:
+            logWarn("Unhandled event eventType:${eventType}")
+            break;
     }
 }

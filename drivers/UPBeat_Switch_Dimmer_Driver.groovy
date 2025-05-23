@@ -28,9 +28,9 @@ metadata {
 
     preferences {
         input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
-        input name: "networkId", type: "number", title: "Network ID", required: true, range: "0..255"
-        input name: "deviceId", type: "number", title: "Device ID", required: true, range: "0..255"
-        input name: "channelId", type: "number", title: "Channel ID", required: true, range: "0..255"
+        input name: "networkId", type: "number", title: "Network ID", description: "UPB Network ID (0-255)", required: true, range: "0..255"
+        input name: "deviceId", type: "number", title: "Device ID", description: "UPB Device ID (1-250)", required: true, range: "1..250"
+        input name: "channelId", type: "number", title: "Channel ID", description: "UPB Channel ID (1-255)", required: true, range: "1..255"
         input name: "fadeRate", type: "enum", title: "Default Fade Rate", options: FADE_RATE_MAPPING.keySet(), defaultValue: "Default", required: false
         input name: "receiveComponent1", type: "text", title: "Receive Component 1", description: "Format: linkId:level"
         input name: "receiveComponent2", type: "text", title: "Receive Component 2", description: "Format: linkId:level"
@@ -127,7 +127,7 @@ def updated() {
 /***************************************************************************
  * Handlers for Driver Data
  ***************************************************************************/
-def updateNetworkId(Long networkId) {
+def updateNetworkId(int networkId) {
     logTrace "updateNetworkId(${networkId})"
     try {
         isCorrectParent()
@@ -139,7 +139,7 @@ def updateNetworkId(Long networkId) {
     }
 }
 
-def updateDeviceId(Long deviceId) {
+def updateDeviceId(int deviceId) {
     logTrace "updateDeviceId(${deviceId})"
     try {
         isCorrectParent()
@@ -151,8 +151,8 @@ def updateDeviceId(Long deviceId) {
     }
 }
 
-def updateChannelId(Long channelId) {
-    logTrace "updateChannelId(${channelId})"
+def updateChannelId(int channelId) {
+    log.trace "updateChannelId(${channelId})"
     try {
         isCorrectParent()
         device.updateSetting("channelId", [type: "number", value: channelId])
@@ -360,17 +360,29 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
     }
 }
 
+def handleGotoEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int level, int rate, int channel)
+{
+    logTrace "handleGotoEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, level=${level}, rate=${rate}, channel=${channel})"
+    try {
+        isCorrectParent()
+        def switchValue = (level == 0) ? "off" : "on"
+        logDebug "Updating switch to ${switchValue}, level to ${level} for device [${settings.deviceId}]"
+        sendEvent(name: "switch", value: switchValue, isStateChange: true)
+        sendEvent(name: "level", value: level, isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    }
+}
 
-def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
+
+def handleDeviceStateReport(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
     logTrace "handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})"
     try {
         isCorrectParent()
-        if (settings.networkId != networkId || settings.deviceId != destinationId) {
-            logDebug "Ignoring deviceState for Network ID ${networkId} (expected ${settings.networkId}), Device ID ${destinationId} (expected ${settings.deviceId})"
-            return
-        }
-
-        int level = messageArgs.size() > 0 ? Math.min(messageArgs[0], 100) : 0
+        int channel = settings.channelId.intValue() - 1
+        int level = messageArgs.size() > channel ? Math.min(messageArgs[channel], 100) : 0
 
         def switchValue = (level == 0) ? "off" : "on"
         logDebug "Updating switch to ${switchValue}, level to ${level} for device [${settings.deviceId}]"

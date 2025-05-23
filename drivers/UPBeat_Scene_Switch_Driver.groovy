@@ -17,8 +17,8 @@ metadata {
 
 preferences {
     input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
-    input name: "networkId", type: "number", title: "Network ID", required: false
-    input name: "linkId", type: "number", title: "Link ID", required: false
+    input name: "networkId", type: "number", title: "Network ID", description: "UPB Network ID (0-255)", required: true, range: "0..255"
+    input name: "linkId", type: "number", title: "Link ID", description: "UPB Link ID (1-250)", required: true, range: "1..250"
 }
 
 /***************************************************************************
@@ -115,7 +115,7 @@ def on() {
             logDebug("Command successfully sent [${data}]")
             sendEvent(name: "switch", value: "on", isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
-            getParent().handleLinkEvent("user", "activate", networkId, 0, linkId)
+            getParent().handleLinkEvent("user", "UPB_ACTIVATE_LINK", networkId, 0, linkId)
         } else {
             logDebug("Failed to issue command [${data}]")
             sendEvent(name: "status", value: "error", descriptionText: "Failed to send activate command", isStateChange: true)
@@ -147,7 +147,7 @@ def off() {
             logDebug("Command successfully sent [${data}]")
             sendEvent(name: "switch", value: "off", isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
-            getParent().handleLinkEvent("user", "deactivate", networkId, 0, linkId)
+            getParent().handleLinkEvent("user", "UPB_DEACTIVATE_LINK", networkId, 0, linkId)
         } else {
             logDebug("Failed to issue command [${data}]")
             sendEvent(name: "status", value: "error", descriptionText: "Failed to send deactivate command", isStateChange: true)
@@ -174,13 +174,13 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         }
         boolean success = false
         switch (eventType) {
-            case "activate":
+            case "UPB_ACTIVATE_LINK":
                 logDebug "Activating scene [${settings.linkId}] due to Link Event"
                 sendEvent(name: "switch", value: "on", isStateChange: true)
                 sendEvent(name: "status", value: "ok", isStateChange: false)
                 success = true
                 break
-            case "deactivate":
+            case "UPB_DEACTIVATE_LINK":
                 logDebug "Deactivating scene [${settings.linkId}] due to Link Event"
                 sendEvent(name: "switch", value: "off", isStateChange: true)
                 sendEvent(name: "status", value: "ok", isStateChange: false)
