@@ -99,31 +99,28 @@ metadata {
  * Helper Functions
  ***************************************************************************/
 private void setNetworkStatus(String state, String reason = '') {
-    logTrace "setNetworkStatus()"
+    logTrace("setNetworkStatus(state=%s,reason=%s)", state, reason)
     String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
     sendEvent(name: "Network", value: state, descriptionText: msg, isStateChange: true)
-    logInfo msg
 }
 
 private void setModuleStatus(String state, String reason = '') {
-    logTrace "setModuleStatus()"
+    logTrace("setModuleStatus(state=%s,reason=%s)", state, reason)
     String msg = "${device} is ${state.toLowerCase()}${reason ? ' :' + reason : ''}"
     sendEvent(name: "PIM", value: state, descriptionText: msg, isStateChange: true)
-    logInfo msg
 }
 
 private void setDeviceStatus(String state, String reason = '', boolean forceEvent = false) {
-    logTrace "setDeviceStatus()"
+    logTrace("setModuleStatus(state=%s,reason=%s,forceEvent=%s)", state, reason, forceEvent)
     String msg = reason ?: "${device} is ${state.toLowerCase()}"
     sendEvent(name: "status", value: state, descriptionText: msg, isStateChange: forceEvent)
-    logInfo msg
 }
 
 /***************************************************************************
  * Core Driver Functions
  ***************************************************************************/
 def installed() {
-    logTrace "installed()"
+    logTrace("installed()")
     try {
         isCorrectParent()
         setDeviceStatus("ok")
@@ -134,7 +131,7 @@ def installed() {
 }
 
 def uninstalled() {
-    logTrace "uninstalled()"
+    logTrace("uninstalled()")
     try {
         isCorrectParent()
         closeSocket()
@@ -150,7 +147,7 @@ def uninstalled() {
 }
 
 def updated() {
-    logTrace "updated()"
+    logTrace("updated()")
     try {
         isCorrectParent()
         initialize()
@@ -163,17 +160,18 @@ def updated() {
 }
 
 def initialize() {
-    logTrace "initialize()"
+    logTrace("initialize()")
     try {
         isCorrectParent()
-        logInfo "DNI: ${device.deviceNetworkId}"
-        logInfo "Host: ${ipAddress}:${portNumber}"
-        logInfo "maxRetry: ${maxRetry}"
-        logInfo "maxProcessingTime: ${maxProcessingTime}"
-        logInfo "reconnectInterval: ${reconnectInterval}"
-        logInfo "LogLevel: [${LOG_LEVELS[logLevel.toInteger()]}]"
+        logInfo("DNI: %s", device.deviceNetworkId)
+        logInfo("hostInfo: %s:%s", ipAddress, portNumber)
+        logInfo("maxRetry: %s", maxRetry)
+        logInfo("maxProcessingTime: %s", maxProcessingTime)
+        logInfo("reconnectInterval: %s", reconnectInterval)
+        logInfo("logLevel: %s", LOG_LEVELS[logLevel.toInteger()])
         deviceMutexes.put(device.deviceNetworkId, new Object())
         deviceResponses.put(device.deviceNetworkId, [response: 'None', semaphore: new Semaphore(0)])
+
         closeSocket()
         if (!openSocket()) {
             setModuleStatus("Inactive", "Failed to open socket")
@@ -198,16 +196,15 @@ def initialize() {
  * Web Socket User Defined
  ***************************************************************************/
 def socketStatus(message) {
-    logTrace "socketStatus()"
+    logTrace("socketStatus(message=%s)", message)
     try {
         isCorrectParent()
-        logDebug "Message: ${message}"
         if (message.contains('error: Stream closed') || message.contains('error: Connection timed out') || message.contains("receive error: Connection reset")) {
-            logError "socketStatus(): ${message}"
-            closeSocket()
-            logDebug "Reconncting in ${reconnectInterval} seconds"
+            msg = sprintf("Socket Status: %s", message)
+            logError(msg)
+            setDeviceStatus("error", msg, true)
+            logInfo("Attempting reconnect in %s seconds", reconnectInterval)
             runIn(reconnectInterval, reconnectSocket)
-            setDeviceStatus("error", "Socket error: ${message}", true)
         }
     } catch (IllegalStateException e) {
         log.error e.message
@@ -368,9 +365,11 @@ def reconnectSocket() {
         }
         throw new Exception("Failed to open socket during reconnect")
     } catch (Exception e) {
-        log.error e.message
+        logError(e.message)
         setModuleStatus("Inactive", e.message)
         setDeviceStatus("error", e.message, true)
+        logInfo("Attempting reconnect in %s seconds", reconnectInterval)
+        runIn(reconnectInterval, reconnectSocket)
     }
 }
 
