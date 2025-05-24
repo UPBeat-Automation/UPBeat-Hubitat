@@ -1,11 +1,12 @@
 /*
-* Hubitat Library: UPBeatLogger
-* Description: Logger library used by Apps and Devices
-* Copyright: 2025 UPBeat Automation
-* Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
-* Author: UPBeat Automation
-*/
+ * Hubitat Library: UPBeatLogger
+ * Description: Logger library used by Apps and Devices
+ * Copyright: 2025 UPBeat Automation
+ * Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+ * Author: UPBeat Automation
+ */
 import groovy.transform.Field
+import java.util.regex.Pattern
 
 library (
         name: "UPBeatLogger",
@@ -17,87 +18,50 @@ library (
 
 @Field static final Map LOG_LEVELS = [0:"Off", 1:"Error", 2:"Warn", 3:"Info", 4:"Debug", 5:"Trace"]
 @Field static final int LOG_DEFAULT_LEVEL = 0
+@Field static final Pattern HHU_PATTERN = Pattern.compile('%([-#+ 0]*)(\\d*)(\\.\\d*)?hhu')
 
-void logError(message) {
-    if (logLevel.toInteger()>=1) log.error message
-    //log.error message
-}
-void logWarn(message) {
-    if (logLevel.toInteger()>=2) log.warn message
-    //log.warn message
-}
-void logInfo(message) {
-    if (logLevel.toInteger()>=3) log.info message
-    //log.info message
-}
-void logDebug(message) {
-    if (logLevel.toInteger()>=4) log.debug message
-    //log.debug message
-}
-void logTrace(message) {
-    if (logLevel.toInteger()>=5) log.trace message
-    //log.trace message
-}
-
-
-static Map createLogger(log) {
-    def loggerMap = [
-            log: null,
-            logLevel: LOG_DEFAULT_LEVEL,
-
-            setLogger: { logger ->
-                delegate.log = logger
-            },
-
-            getLogger: {
-                return delegate.log
-            },
-
-            setLogLevel: { int level ->
-                delegate.logLevel = level
-            },
-
-            getLogLevel: {
-                return delegate.logLevel
-            },
-
-            logError: { String message ->
-                if (delegate.getLogLevel() >= 1) {
-                    delegate.log.error message
-                }
-            },
-
-            logWarn: { String message ->
-                if (delegate.getLogLevel() >= 2) {
-                    delegate.log.warn message
-                }
-            },
-
-            logInfo: { String message ->
-                if (delegate.getLogLevel() >= 3) {
-                    delegate.log.info message
-                }
-            },
-
-            logDebug: { String message ->
-                if (delegate.getLogLevel() >= 4) {
-                    delegate.log.debug message
-                }
-            },
-
-            logTrace: { String message ->
-                if (delegate.getLogLevel() >= 5) {
-                    delegate.log.trace message
-                }
-            }
-    ]
-
-    loggerMap.each { key, value ->
-        if (value instanceof Closure) {
-            value.delegate = loggerMap
-            value.resolveStrategy = Closure.DELEGATE_FIRST
+// Formats strings, handles %hhu for unsigned bytes, and byte arrays printed as hex
+String sprintf(String format, Object... args) {
+    def processedArgs = args.collect { arg ->
+        if (arg instanceof Byte) {
+            arg & 0xFF // Convert single Byte to unsigned (0-255)
+        } else if (arg instanceof byte[]) {
+            // Convert byte[] to comma-separated 0x%02X values
+            ((byte[])arg).collect { String.format("0x%02X", it & 0xFF) }.join(", ")
+        } else {
+            arg
         }
     }
+    def modifiedFormat = format.replaceAll(HHU_PATTERN, '%$1$2$3d')
+    String.format(modifiedFormat, processedArgs as Object[])
+}
 
-    return loggerMap
+void logError(String format, Object... args) {
+    if (logLevel.toInteger() >= 1) {
+        log.error(args ? sprintf(format, args) : format)
+    }
+}
+
+void logWarn(String format, Object... args) {
+    if (logLevel.toInteger() >= 2) {
+        log.warn(args ? sprintf(format, args) : format)
+    }
+}
+
+void logInfo(String format, Object... args) {
+    if (logLevel.toInteger() >= 3) {
+        log.info(args ? sprintf(format, args) : format)
+    }
+}
+
+void logDebug(String format, Object... args) {
+    if (logLevel.toInteger() >= 4) {
+        log.debug args ? sprintf(format, args) : format
+    }
+}
+
+void logTrace(String format, Object... args) {
+    if (logLevel.toInteger() >= 5) {
+        log.trace args ? sprintf(format, args) : format
+    }
 }
