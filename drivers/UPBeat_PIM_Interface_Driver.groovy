@@ -217,46 +217,46 @@ def socketStatus(message) {
 }
 
 def parse(hexMessage) {
-    logTrace "parse()"
+    logTrace("parse(%s)" , hexMessage)
     try {
         isCorrectParent()
-        logDebug "Message Received: [${hexMessage}]"
+        logDebug("Message Received: [${hexMessage}]")
 
-        byte[] messageBytes = hubitat.helper.HexUtils.hexStringToByteArray(hexMessage)
+        byte[] messageBytes = HexUtils.hexStringToByteArray(hexMessage)
 
         // Strip EOL character, should be present always
         if (messageBytes.size() > 0 && messageBytes[messageBytes.length - 1] == 0x0D) {
             messageBytes = messageBytes[0..-2]
-            logDebug("[${hexMessage}]: ${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)} (EOL Removed)")
+            logTrace("[%s]: %s (EOL Removed)", hexMessage, HexUtils.byteArrayToHexString(messageBytes))
         } else {
-            logError "[${hexMessage}]: No EOL found"
+            logError("[%s]: No EOL found", hexMessage)
             setDeviceStatus("error", "Message parsing failed: No EOL found", true)
             return
         }
 
         if (messageBytes.size() < 2) {
-            logError "[${hexMessage}]: Invalid data"
+            logError("[%s]: Invalid data", hexMessage)
             setDeviceStatus("error", "Message parsing failed: Invalid data length", true)
             return
         }
 
         // Show converted and parsed type
         def asciiMessage = new String(messageBytes)
-        logDebug "[${hubitat.helper.HexUtils.byteArrayToHexString(messageBytes)}]: [${asciiMessage}] (Converted)"
+        logTrace("[%s]: [%s] (Bytes to String)", HexUtils.byteArrayToHexString(messageBytes), asciiMessage)
 
         // Parse message type from original bytes
         byte[] messageTypeBytes = messageBytes[0..1]
         String messageType = new String(messageTypeBytes)
 
-        logDebug "[${asciiMessage}]: Type=[${messageType}]"
+        logTrace("[%s]: Type=[%s]", asciiMessage, messageType)
 
         byte[] messageData = new byte[0]
 
         if (messageBytes.size() > 2) {
             messageData = messageBytes[2..-1]
             String messageDataString = new String(messageData)
-            messageData = hubitat.helper.HexUtils.hexStringToByteArray(messageDataString)
-            logDebug "[${asciiMessage}]: Data=${messageDataString}"
+            messageData = HexUtils.hexStringToByteArray(messageDataString)
+            logTrace("[%s]: Data=[%s]", asciiMessage, messageData)
         }
 
         def responseEntry = deviceResponses.get(device.deviceNetworkId)
@@ -376,7 +376,7 @@ def reconnectSocket() {
 
 private def sendBytes(byte[] bytes) {
     logTrace "sendBytes()"
-    def hexString = hubitat.helper.HexUtils.byteArrayToHexString(bytes)
+    def hexString = HexUtils.byteArrayToHexString(bytes)
     interfaces.rawSocket.sendMessage(hexString)
 }
 
@@ -419,7 +419,7 @@ def getCommandModeMessage() {
     def packet = new ByteArrayOutputStream()
     packet.write([0x70, 0x02] as byte[]) // Control Word
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug "Checksum: ${String.format('%02X', sum & 0xFF)}"
+    logDebug "Checksum: %02X", sum
     packet.write(sum)
 
     String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
@@ -521,7 +521,7 @@ def transmitMessage(byte[] bytes) {
 }
 
 def asyncParseMessageReport(Map data) {
-    logTrace "asyncParseMessageReport(${data})"
+    logTrace "asyncParseMessageReport()"
     try {
         def messageData = data?.messageData
         if (messageData) {
@@ -545,10 +545,10 @@ def parseMessageReport(byte[] data) {
     }
 
     // Validate checksum
-    int sum = 0
-    data.each { b -> sum += (b & 0xFF) }
-    if ((sum & 0xFF) != 0) {
-        logError "[${messageDataString}]: Invalid checksum CHK=${sum}"
+    byte sum = 0
+    data.each { b -> sum += (b & 0xFF) } // Unsigned summation
+    if (sum != 0) {
+        logError("[%s]: Invalid checksum CHK=0x%02X (%hhu)", messageDataString, sum, sum)
         return
     }
 
@@ -557,7 +557,11 @@ def parseMessageReport(byte[] data) {
     byte networkId = data[2]
     byte destinationId = data[3]
     byte sourceId = data[4]
-    logDebug "[${messageDataString}]: HDR Control=${String.format('0x%04X (%d)', controlWord, controlWord)}, NID=${String.format('0x%02X (%d)', networkId & 0xFF, networkId & 0xFF)}, DID=${String.format('0x%02X (%d)', destinationId & 0xFF, destinationId & 0xFF)}, SID=${String.format('0x%02X (%d)', sourceId & 0xFF, sourceId & 0xFF)}"
+    logTrace("[%s]: HDR Control=0x%04X (%d), NID=0x%02X (%hhu), DID=0x%02X (%hhu), SID=0x%02X (%hhu)",
+            messageDataString, controlWord, controlWord,
+            networkId, networkId,
+            destinationId, destinationId,
+            sourceId, sourceId)
 
     // Parse UPB message
     byte[] messageContent = data[5..-2]
@@ -567,204 +571,489 @@ def parseMessageReport(byte[] data) {
     }
 
     byte messageDataId = messageContent[0]
-    logDebug "[${messageDataString}]: MDID=${String.format('0x%02X', messageDataId)}"
-
     byte messageSetId = (messageDataId >> 5) & 0x07
-    byte messageIdByte = messageDataId & 0x1F
+    byte messageId = messageDataId & 0x1F
+
+    logTrace("[%s]: MDID=0x%02X (%hhu), MSID=0x%02X (%hhu), MID=0x%02X (%hhu)",
+            messageDataString,
+            messageDataId, messageDataId,
+            messageSetId,messageSetId,
+            messageId,messageId)
 
     // Initialize messageArgs as an empty byte array
     byte[] messageArgs = new byte[0]
-    def argsHex = []
     if (messageContent.size() > 1) {
         messageArgs = messageContent[1..-1]
-        argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
     }
-    logDebug "[${messageDataString}]: MDA=${argsHex}"
+
+    logTrace "[%s]: MDA=[%s]", messageDataString, messageArgs
 
     switch(messageSetId) {
         case UPB_CORE_COMMAND:
-            logDebug "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             processCoreCommand(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         case UPB_DEVICE_CONTROL_COMMAND:
-            logDebug "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             processDeviceControlCommand(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         case UPB_RESERVED_COMAND_SET_1:
-            logWarn "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             break
         case UPB_RESERVED_COMAND_SET_2:
-            logWarn "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             break
         case UPB_CORE_REPORTS:
-            logDebug "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             processCoreReport(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         case UPB_RESERVED_REPORT_SET_1:
-            logWarn "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             break
         case UPB_RESERVED_REPORT_SET_2:
-            logWarn "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             break
         case UPB_EXTENDED_MESSAGE_SET:
-            logDebug "[${messageDataString}]: Handling ${getMsidName(messageSetId)}"
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             processExtendedMessage(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         default:
-            logError "[${messageDataString}]: Handling ${getMsidName(messageSetId)} ${String.format('0x%02X', messageSetId)}"
+            logError("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMsidName(messageSetId), messageSetId,
+                    controlWord, controlWord,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageDataId, messageDataId,
+                    messageArgs)
             break
     }
 }
 
 void processCoreCommand(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace "processCoreCommand()"
-    def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
+    logTrace("processCoreCommand(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=%s)",
+            controlWord, controlWord,
+            networkId, networkId,
+            destinationId, destinationId,
+            sourceId, sourceId,
+            messageDataId,messageDataId,
+            messageArgs)
+
     switch(messageDataId) {
         case UPB_NULL_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_WRITE_ENABLED_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_WRITE_PROTECT_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_START_SETUP_MODE_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_STOP_SETUP_MODE_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_GET_SETUP_TIME_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_AUTO_ADDRESS_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_GET_DEVICE_STATUS_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_SET_DEVICE_CONTROL_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_ADD_LINK_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_DEL_LINK_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_TRANSMIT_MESSAGE_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_DEVICE_RESET_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_GET_DEVICE_SIG_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_GET_REGISTER_VALUE_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_SET_REGISTER_VALUE_COMMAND:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         default:
-            logError "Handling ${getMdidName(messageDataId)} ${String.format('0x%02X', messageDataId)}"
+            logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
     }
 }
 
 void processDeviceControlCommand(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace "processDeviceControlCommand()"
-    def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
+    logTrace("processDeviceControlCommand(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s])",
+            controlWord, controlWord,
+            networkId, networkId,
+            destinationId, destinationId,
+            sourceId, sourceId,
+            messageDataId,messageDataId,
+            messageArgs)
+
     switch(messageDataId) {
         case UPB_ACTIVATE_LINK:
-            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), linkId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_DEACTIVATE_LINK:
-            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, linkId=${destinationId & 0xFF}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), linkId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_GOTO:
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             int[] args = messageArgs.collect { it & 0xFF } as int[]
-            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
             getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_FADE_START:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_FADE_STOP:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_BLINK:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_INDICATE:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_TOGGLE:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_REPORT_STATE:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_STORE_STATE:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         default:
-            logError "Handling ${getMdidName(messageDataId)} ${String.format('0x%02X', messageDataId)}"
+            logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
     }
 }
 
 void processCoreReport(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace "processCoreReport()"
+    logTrace("processCoreReport(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s])",
+            controlWord, controlWord,
+            networkId, networkId,
+            destinationId, destinationId,
+            sourceId, sourceId,
+            messageDataId,messageDataId,
+            messageArgs)
     def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
     switch(messageDataId) {
         case UPB_ACK_RESPONSE:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_SETUP_TIME:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_DEVICE_STATE:
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             if (messageArgs.size() < 1) {
                 logError "[${messageDataString}]: No state data in Device State Report"
                 return
             }
             int[] args = messageArgs.collect { it & 0xFF } as int[]
-            logInfo "Handleing ${getMdidName(messageDataId)} networkId=${networkId & 0xFF}, sourceId=${sourceId & 0xFF}, destinationId=${destinationId & 0xFF}, messageArgs=${args}"
             getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_DEVICE_STATUS:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_DEVICE_SIG:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_REGISTER_VALUES:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_RAM_VALUES:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_RAW_DATA:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         case UPB_HEARTBEAT:
-            logDebug "Handling ${getMdidName(messageDataId)} Args=${argsHex}"
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
         default:
-            logError "Handling ${getMdidName(messageDataId)} ${String.format('0x%02X', messageDataId)}"
+            logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+                    getMdidName(messageDataId), messageDataId,
+                    networkId, networkId,
+                    sourceId, sourceId,
+                    destinationId, destinationId,
+                    messageArgs)
             break
     }
 }
 
 void processExtendedMessage(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace "processExtendedMessage()"
-    def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
-    logDebug "Handling Extended Message: MDID=0x${String.format('%02X', messageDataId)}, Args=${argsHex}"
+    logTrace("processExtendedMessage(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s])",
+            controlWord, controlWord,
+            networkId, networkId,
+            destinationId, destinationId,
+            sourceId, sourceId,
+            messageDataId,messageDataId,
+            messageArgs)
+
+    logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            getMdidName(messageDataId), messageDataId,
+            networkId, networkId,
+            sourceId, sourceId,
+            destinationId, destinationId,
+            messageArgs)
 }
 
 // Helper methods for readable logging
