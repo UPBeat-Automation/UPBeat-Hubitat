@@ -135,9 +135,9 @@ def uninstalled() {
     try {
         isCorrectParent()
         closeSocket()
-        logInfo "Removing ${device.deviceNetworkId} mutex"
+        logInfo("Removing %s mutex", device.deviceNetworkId)
         deviceMutexes.remove(device.deviceNetworkId)
-        logInfo "Removing ${device.deviceNetworkId} response buffer"
+        logInfo("Removing %s response buffer", device.deviceNetworkId)
         deviceResponses.remove(device.deviceNetworkId)
         setDeviceStatus("ok")
     } catch (IllegalStateException e) {
@@ -261,40 +261,40 @@ def parse(hexMessage) {
             case "PA":
                 synchronized (responseEntry) {
                     responseEntry.response = 'PA'
-                    logDebug "pim_accept_message"
+                    logDebug("pim_accept_message")
                     responseEntry.semaphore.release()
                 }
                 break
             case "PE":
                 synchronized (responseEntry) {
                     responseEntry.response = 'PE'
-                    logError "pim_error_message"
+                    logError("pim_error_message")
                     responseEntry.semaphore.release()
                 }
                 break
             case "PB":
                 synchronized (responseEntry) {
                     responseEntry.response = 'PB'
-                    logWarn "pim_busy_message"
+                    logWarn("pim_busy_message")
                     responseEntry.semaphore.release()
                 }
                 break
             case "PK":
-                logDebug "upb_ack_message"
+                logDebug("upb_ack_message")
                 break
             case "PN":
-                logWarn "upb_nak_message"
+                logDebug("upb_nak_message")
                 break
             case "PR":
-                logDebug "pim_register_report_message"
+                logDebug("pim_register_report_message")
                 break
             case "PU":
-                logDebug "upb_report_message"
+                logDebug("upb_report_message")
                 // Dispatch to external thread, to prevent blocking
                 runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
                 break
             default:
-                logError "Unknown message type: ${messageType}"
+                logError("Unknown message type: ${messageType}")
                 setDeviceStatus("error", "Message parsing failed: Unknown message type: ${messageType}", true)
                 return
         }
@@ -311,17 +311,17 @@ def parse(hexMessage) {
  * Custom Driver Functions
  ***************************************************************************/
 def openSocket() {
-    logTrace "openSocket()"
+    logTrace("openSocket()")
     try {
         isCorrectParent()
         try {
             interfaces.rawSocket.connect(settings.ipAddress, settings.portNumber.toInteger(), byteInterface: true, eol: '\r')
-            logInfo "Connected to ${settings.ipAddress}:${portNumber}"
+            logInfo("Connected to %s:%s", ipAddress, portNumber)
             setNetworkStatus("Connected")
             setDeviceStatus("ok")
             return true
         } catch (Exception e) {
-            logError "Connect failed to ${settings.ipAddress}:${portNumber} - ${e.getMessage()}"
+            logError("Connect failed to %s:%s - %s", ipAddress, portNumber, e.getMessage())
             setNetworkStatus("Connect failed", e.getMessage())
             setModuleStatus("Inactive", "Failed to connect to socket")
             setDeviceStatus("error", "Failed to connect to socket: ${e.getMessage()}", true)
@@ -336,16 +336,15 @@ def openSocket() {
 }
 
 def closeSocket() {
-    logTrace "closeSocket()"
+    logTrace("closeSocket()")
     try {
         interfaces.rawSocket.close()
-        logInfo "Disconnected from ${settings.ipAddress}:${portNumber}"
         setNetworkStatus("Disconnected")
         setModuleStatus("Inactive")
         setDeviceStatus("ok")
         return true
     } catch (Exception e) {
-        logWarn "Disconnect failed from ${settings.ipAddress}:${portNumber}"
+        logWarn("Disconnect failed")
         setNetworkStatus("Disconnect failed", e.getMessage())
         setModuleStatus("Inactive", "Failed to disconnect from socket")
         setDeviceStatus("error", "Failed to disconnect from socket: ${e.getMessage()}", true)
@@ -354,7 +353,7 @@ def closeSocket() {
 }
 
 def reconnectSocket() {
-    logTrace "reconnectSocket()"
+    logTrace("reconnectSocket()")
     try {
         if (openSocket()) {
             if (setPIMCommandMode()) {
@@ -374,22 +373,22 @@ def reconnectSocket() {
 }
 
 private def sendBytes(byte[] bytes) {
-    logTrace "sendBytes()"
+    logTrace("sendBytes()")
     def hexString = HexUtils.byteArrayToHexString(bytes)
     interfaces.rawSocket.sendMessage(hexString)
 }
 
 private def checksum(byte[] data) {
-    logTrace "checksum()"
+    logTrace("checksum()")
     def sum = data.sum()
     return (~sum + 1) & 0xFF
 }
 
 def setIPAddress(String ipAddress) {
-    logTrace "setIPAddress()"
+    logTrace("setIPAddress(%s)", ipAddress)
     try {
         isCorrectParent()
-        logInfo "Setting IP address to ${ipAddress}"
+        logInfo("Setting IP address to ${ipAddress}")
         device.updateSetting("ipAddress", [value: ipAddress, type: "text"])
         setDeviceStatus("ok")
     } catch (IllegalStateException e) {
@@ -400,10 +399,10 @@ def setIPAddress(String ipAddress) {
 }
 
 def setPortNumber(int portNumber) {
-    logTrace "setPortNumber()"
+    logTrace("setPortNumber(%d)", portNumber)
     try {
         isCorrectParent()
-        logInfo "Setting port number to ${portNumber}"
+        logInfo("Setting port number to %d", portNumber)
         device.updateSetting("portNumber", [value: portNumber, type: "number"])
         setDeviceStatus("ok")
     } catch (IllegalStateException e) {
@@ -414,16 +413,16 @@ def setPortNumber(int portNumber) {
 }
 
 byte[] getCommandModeMessage() {
-    logTrace "getCommandModeMessage()"
+    logTrace("getCommandModeMessage()")
     def packet = new ByteArrayOutputStream()
     packet.write([0x70, 0x02] as byte[]) // Control Word
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug "Checksum: %02X", sum
+    logDebug("Checksum: %d", sum)
     packet.write(sum)
 
     String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
 
-    logDebug "PIM Packet: ${packetTextHex}"
+    logDebug("PIM Packet: %s", packetTextHex)
 
     def encodedPacket = packetTextHex.getBytes()
 
@@ -440,14 +439,14 @@ byte[] getCommandModeMessage() {
 }
 
 def setPIMCommandMode() {
-    logTrace "setPIMCommandMode()"
+    logTrace("setPIMCommandMode()")
     if (transmitMessage(getCommandModeMessage())) {
-        logInfo "PIM was successfully set to command mode."
+        logInfo("PIM was successfully set to command mode.")
         setModuleStatus("Active")
         setDeviceStatus("ok")
         return true
     } else {
-        logWarn "PIM failed to set to command mode."
+        logWarn("PIM failed to set to command mode.")
         setModuleStatus("Inactive")
         setDeviceStatus("error", "Failed to set PIM to command mode", true)
         return false
@@ -469,7 +468,7 @@ def transmitMessage(byte[] bytes) {
                     responseEntry.response = 'None'
                     responseEntry.semaphore.drainPermits() // Reset permits to 0
                     sendBytes(bytes)
-                    logDebug "Message sent to PIM."
+                    logDebug("Message sent to PIM.")
                     break
                 case 'Sent':
                     // Wait for the response to be set by parse()
@@ -486,31 +485,31 @@ def transmitMessage(byte[] bytes) {
                                 sendStatus = 'Retry'
                                 break
                             default:
-                                logError "PIM response is invalid ${response}."
+                                logError("PIM response is invalid %s.", response)
                                 sendStatus = 'Failed'
                                 break
                         }
                     } else {
-                        logError "Timeout waiting for PIM response"
+                        logError("Timeout waiting for PIM response")
                         sendStatus = 'Failed'
                     }
                     break
                 case 'Retry':
                     if (retry++ < maxRetry) {
-                        logDebug "Retrying to send message to PIM."
+                        logDebug("Retrying to send message to PIM.")
                         sendBytes(bytes)
                         sendStatus = 'Sent'
                     } else {
-                        logError "Retry limit reached."
+                        logError("Retry limit reached.")
                         sendStatus = 'Failed'
                     }
                     break
                 case 'Failed':
-                    logError "Message could not be sent."
+                    logError("Message could not be sent.")
                     exit = true
                     break
                 case 'Success':
-                    logDebug "Message was sent successfully."
+                    logDebug("Message was sent successfully.")
                     exit = true
                     break
             }
@@ -520,16 +519,16 @@ def transmitMessage(byte[] bytes) {
 }
 
 def asyncParseMessageReport(Map data) {
-    logTrace "asyncParseMessageReport()"
+    logTrace("asyncParseMessageReport()")
     try {
         def messageData = data?.messageData
         if (messageData) {
             parseMessageReport(messageData.collect { it as byte } as byte[])
         } else {
-            logWarn "No message data in asyncParseMessageReport"
+            logWarn("No message data in asyncParseMessageReport.")
         }
     } catch (Exception e) {
-        logError "Error in asyncParseMessageReport: ${e.message}"
+        logError("Error in asyncParseMessageReport: ${e.message}")
     }
 }
 
@@ -539,7 +538,7 @@ def parseMessageReport(byte[] data) {
 
     // Validate packet length
     if (data.size() < 5) {
-        logError "[${messageDataString}]: Invalid UPB packet, too short"
+        logError("[${messageDataString}]: Invalid UPB packet, too short.")
         return
     }
 
@@ -565,7 +564,7 @@ def parseMessageReport(byte[] data) {
     // Parse UPB message
     byte[] messageContent = data[5..-2]
     if (messageContent.size() < 1) {
-        logError "[${messageDataString}]: No message data"
+        logError("[${messageDataString}]: No message data.")
         return
     }
 
@@ -973,7 +972,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     destinationId, destinationId,
                     messageArgs)
             if (messageArgs.size() < 1) {
-                logError "[${messageDataString}]: No state data in Device State Report"
+                logError("[%s]: No state data in Device State Report", messageDataString)
                 return
             }
             int[] args = messageArgs.collect { it & 0xFF } as int[]
