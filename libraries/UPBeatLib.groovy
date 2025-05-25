@@ -15,7 +15,7 @@ library(
 )
 
 def buildDeviceNetworkId(int networkId, int unitId, int channel) {
-    logTrace "buildDeviceNetworkId()"
+    logTrace("buildDeviceNetworkId(networkId=%d,unitId=%d,channel=%d)", networkId, unitId, channel)
     // Validate inputs (0-255 for each field)
     if (networkId < 0 || networkId > 255) {
         throw new IllegalArgumentException("NetworkId must be 0-255, got: ${networkId}")
@@ -27,17 +27,15 @@ def buildDeviceNetworkId(int networkId, int unitId, int channel) {
         throw new IllegalArgumentException("Channel must be 0-255, got: ${channel}")
     }
 
-    // Build the ID as a hexadecimal string: PT:NET:UID:CH (e.g., 01872A00 for packetType=1)
     String deviceNetworkId = String.format("UPBeat_%02X%02X%02X", networkId, unitId, channel)
 
-    // Log the components for debugging
-    logDebug "DeviceNetworkId: ${deviceNetworkId} (NetworkId=${networkId}, UnitId=${unitId}, Channel=${channel})"
+    logDebug "DeviceNetworkId: ${deviceNetworkId} (networkId=${networkId}, unitId=${unitId}, channel=${channel})"
 
     return deviceNetworkId
 }
 
 def buildSceneNetworkId(int networkId, int linkId) {
-    logTrace "buildSceneNetworkId()"
+    logTrace("buildSceneNetworkId(networkId=%d,linkId=%d)", networkId, linkId)
     // Validate inputs (0-255 for each field)
     if (networkId < 0 || networkId > 255) {
         throw new IllegalArgumentException("NetworkId must be 0-255, got: ${networkId}")
@@ -46,302 +44,19 @@ def buildSceneNetworkId(int networkId, int linkId) {
         throw new IllegalArgumentException("LinkId must be 1-250, got: ${linkId}")
     }
 
-    // Build the ID as a hexadecimal string: PT:NET:LID (e.g., 000A32 for packetType=0)
     String sceneNetworkId = String.format("UPBeat_%02X%02X", networkId, linkId)
 
-    // Log the components for debugging
-    logDebug "SceneNetworkId: ${sceneNetworkId} (NetworkId=${networkId}, LinkId=${linkId})"
+    logDebug("SceneNetworkId: ${sceneNetworkId} (networkId=${networkId}, linkId=${linkId})")
 
     return sceneNetworkId
 }
 
-def decodeDeviceNetworkId(String deviceNetworkId) {
-    logTrace "decodeDeviceNetworkId()"
-    // Expected format: 8 characters (e.g., "01872A00")
-    if (deviceNetworkId.length() != 8) {
-        throw new IllegalArgumentException("DeviceNetworkId must be 8 characters, got: ${deviceNetworkId}")
-    }
-
-    try {
-        int packetType = Integer.parseInt(deviceNetworkId.substring(0, 2), 16)
-        int networkId = Integer.parseInt(deviceNetworkId.substring(2, 4), 16)
-        int unitId = Integer.parseInt(deviceNetworkId.substring(4, 6), 16)
-        int channel = Integer.parseInt(deviceNetworkId.substring(6, 8), 16)
-
-        if (packetType != 1) {
-            throw new IllegalArgumentException("DeviceNetworkId must have packetType=1, got: ${packetType}")
-        }
-
-        return [
-                packetType: packetType,
-                networkId: networkId,
-                unitId: unitId,
-                channel: channel
-        ]
-    } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid DeviceNetworkId format: ${deviceNetworkId}", e)
-    }
-}
-
-def decodeSceneNetworkId(String sceneNetworkId) {
-    logTrace "decodeSceneNetworkId()"
-    // Expected format: 6 characters (e.g., "008720")
-    if (sceneNetworkId.length() != 6) {
-        throw new IllegalArgumentException("SceneNetworkId must be 6 characters, got: ${sceneNetworkId}")
-    }
-
-    try {
-        int packetType = Integer.parseInt(sceneNetworkId.substring(0, 2), 16)
-        int networkId = Integer.parseInt(sceneNetworkId.substring(2, 4), 16)
-        int linkId = Integer.parseInt(sceneNetworkId.substring(4, 6), 16)
-
-        if (packetType != 0) {
-            throw new IllegalArgumentException("SceneNetworkId must have packetType=0, got: ${packetType}")
-        }
-
-        return [
-                packetType: packetType,
-                networkId: networkId,
-                linkId: linkId
-        ]
-    } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid SceneNetworkId format: ${sceneNetworkId}", e)
-    }
-}
-
-def sendUpbReport(String networkId, String reportMdid, String sourceId, String... args) {
-    logTrace "sendUpbReport(networkId=${networkId}, reportMdid=${reportMdid}, sourceId=${sourceId}, args=${args})"
-
-    // Decode the network ID to determine if it's a device or scene
-    Map decodedId
-    boolean isDevice
-    try {
-        if (networkId.length() == 8) {
-            decodedId = decodeDeviceNetworkId(networkId)
-            isDevice = true
-        } else if (networkId.length() == 6) {
-            decodedId = decodeSceneNetworkId(networkId)
-            isDevice = false
-        } else {
-            throw new IllegalArgumentException("Invalid networkId length: ${networkId}")
-        }
-    } catch (Exception e) {
-        logError "Failed to decode networkId: ${e.message}"
-        return
-    }
-
-    // Extract fields
-    int nid = decodedId.networkId
-    int did = isDevice ? decodedId.unitId : decodedId.linkId
-    int sid = Integer.parseInt(sourceId, 16) // Source ID (Unit ID of sender)
-    int mdid = Integer.parseInt(reportMdid, 16)
-
-    // Validate source ID
-    if (sid < 1 || sid > 250) {
-        logError "SourceId must be 1-250, got: ${sid}"
-        return
-    }
-
-    // Construct the packet
-    // Control Word: LEN includes header (5 bytes) + MDID (1 byte) + args + CHK (1 byte)
-    int packetLength = 5 + 1 + args.length + 1 // Header + MDID + args + CHK
-    if (packetLength < 6 || packetLength > 24) {
-        logError "Packet length must be 6-24 bytes, got: ${packetLength}"
-        return
-    }
-    // CTL: LNK bit (1 for scene, 0 for device), LEN, no repeats, no ACK
-    int ctlHigh = (isDevice ? 0x00 : 0x80) | ((packetLength >> 2) & 0x1F) // LNK bit + high bits of LEN
-    int ctlLow = (packetLength & 0x03) << 6 // Low bits of LEN, no REPRQ, ACKRQ, CNT, SEQ
-
-    // Build the packet bytes (excluding preamble)
-    List<Integer> packetBytes = []
-    packetBytes << ctlHigh
-    packetBytes << ctlLow
-    packetBytes << nid
-    packetBytes << did
-    packetBytes << sid
-    packetBytes << mdid
-    args.each { arg ->
-        packetBytes << Integer.parseInt(arg, 16)
-    }
-
-    // Compute checksum: 2's complement of the sum of header and message bytes
-    int sum = packetBytes.sum()
-    int chk = (-sum & 0xFF) // 2's complement, truncated to 8 bits
-    packetBytes << chk
-
-    // Convert to byte array
-    byte[] packetData = new byte[packetBytes.size()]
-    packetBytes.eachWithIndex { value, index ->
-        packetData[index] = (byte)(value & 0xFF)
-    }
-
-    // Log the packet
-    String packetHex = packetData.collect { String.format("%02X", it & 0xFF) }.join()
-    logDebug "Sending UPB Report Packet: ${packetHex}"
-
-    // Send the packet (requires a parent app with sendPimMessage)
-    try {
-        if (parent?.sendPimMessage(packetData)) {
-            logDebug "UPB Report Packet sent successfully: ${packetHex}"
-        } else {
-            logWarn "Failed to send UPB Report Packet: ${packetHex}"
-        }
-    } catch (Exception e) {
-        logError "Error sending UPB Report Packet: ${e.message}"
-    }
-}
-
 @Field static final int UPE_FILE_VERSION = 5
-
-@Field static final Map UPB_MANUFACTURER_ID_MAP = [
-        "0": "OEM",
-        "1": "PCS",
-        "2": "MDManufacturing",
-        "3": "WebMountainTech",
-        "4": "SimplyAutomated",
-        "5": "HAI",
-        "10": "RCS",
-        "90": "OEM90",
-        "91": "OEM91",
-        "92": "OEM92",
-        "93": "OEM93",
-        "94": "OEM94",
-        "95": "OEM95",
-        "96": "OEM96",
-        "97": "OEM97",
-        "98": "OEM98",
-        "99": "OEM99"]
-
-@Field static final Map KIND_MAP = [
-        "0": "Other",
-        "1": "Keypad",
-        "2": "Switch",
-        "3": "Module",
-        "4": "Input Module",
-        "5": "Input-Output Module",
-        "6": "Vacuum Power Module",
-        "7": "Vacuum Handle Controller",
-        "8": "Thermostat"]
-
-@Field static final Map PACKET_TYPE_MAP = [
-        "0": "Direct",
-        "1": "Link"]
-
-@Field static final Map PCS_PRODUCTS = [
-        "1": "(WS1) Wall Switch - 1 Channel Switch",
-        "2": "(WS1R) Wall Switch – Relay Switch",
-        "3": "(WMC6) Wall Mount Controller - 6 Button Keypad",
-        "4": "(WMC8) Wall Mount Controller - 8 Button Keypad",
-        "6": "(OCM2) Output Control Module - 2 Channel Module",
-        "7": "(LCM1) Load Control Module 1 Module",
-        "9": "(LM1) Lamp Module - 1 Channel Module",
-        "10": "(LM2) Lamp Module – 2 Channel Module",
-        "11": "(ICM2) Input Control Module - 2 Channel Input",
-        "13": "(DTC6) Desktop Controller - 6 Button Keypad",
-        "14": "(DTC8) Desktop Controller - 8 Button Keypad",
-        "15": "(AM1) Appliance Module - 1 Channel Module",
-        "25": "(LSM) Load Shedding Module Module",
-        "24": "(WS1E) Wall Switch - Electronic Low Voltage Switch",
-        "36": "(DCM) Doorbell Control Module Input",
-        "37": "(TCM) Telephone Control Module Input",
-        "60": "(FMD2) Fixture Module – Dimmer Module",
-        "61": "(FMR) Fixture Module - Relay Module",
-        "62": "(WS2D) LED Wall Switch Switch",
-        "65": "(KPC6) Controller – 6 Button Keypad",
-        "66": "(KPC8) Controller – 8 Button Keypad"]
-
-@Field static final Map HAI_PRODUCTS = [
-        "1": "35A00-1 600W Dimming Switch",
-        "2": "35A00-2 1000W Dimming Switch",
-        "16": "35A00-3 600W Non-Dimming Switch",
-        "17": "35A00-4 1000W Non-Dimming Switch",
-        "18": "40A00-1 15A Relay Switch",
-        "3": "55A00-1 1000W Dimming Switch",
-        "4": "55A00-2 1500W Dimming Switch",
-        "5": "55A00-3 2400W Dimming Switch",
-        "32": "59A00-1 300W Lamp Module",
-        "48": "60A00-1 15A Appliance Module",
-        "80": "38A00-1 6-Button Room Controller Keypad",
-        "81": "HLCK6 6-Button Room Controller Keypad",
-        "96": "38A00-2 8-Button House Controller Keypad"]
-
-
-@Field static final Map SAI_WMT_OEM_PRODUCTS = [
-        "1": "UML Lamp Module Module",
-        "5": "UMA Appliance Module Module",
-        "7": "UFR Fixture Relay / URD Receptacle Switch or Module",
-        "9": "UMA Appliance Module – Timer Module",
-        "10": "UFD Fixture Dimmer Switch or Module",
-        "12": "UML Lamp Module – Timer Module",
-        "13": "UFR Fixture / URD Receptacle – Timer Switch or Module",
-        "14": "UFD Fixture Dimmer – Timer Switch or Module",
-
-        "15": "UCT Tabletop Controller Keypad",
-        "20": "USM1 Switch Motorized Switch",
-        "22": "US1 / US2 Series Dimming Switch Switch",
-        "26": "UCQ / UCQT Quad Output Module Module",
-        "27": "US4 Series Quad Dimming Switch Switch",
-        "28": "US1-40 Series Dimming Switch Switch",
-        "29": "US2-40 Series Dimming Switch Switch",
-        "30": "Serial PIM",
-        "31": "USB PIM",
-        "32": "Ethernet PIM",
-        "33": "Signal Quality Monitoring Unit",
-        "34": "US1-40 Series Dimming Switch – Timer Switch",
-        "36": "UCQTX Quad Output Module Module",
-        "40": "UMI-32 3-Input / 2-Output Module Input-Output Module",
-        "41": "Input Module",
-        "43": "Sprinker Controller",
-        "44": "USM1R Switch",
-        "45": "USM2R Switch",
-        "50": "UQC",
-        "51": "UQC 40",
-        "52": "UQC F",
-        "62": "US22-40T Series Dimming Switch Switch",
-        "201": "Lamp Module (UML-E) Module",
-        "205": "Appliance Module (UMA-E) Module",
-        "222": "Retail Dimming Switch (RS101) Switch",
-        "240": "Retail I/O 32 Module Input-Output Module"]
-
-//"88": "CLSW-01 Classic series single dimmer wall switch",
-//"89": "CL6-01 Classic series wall mount 6 button controller Keypad",
-
-@Field static final Map MD_PRODUCTS = [
-        "32": "(VHC) Vacuum Handle Controller",
-        "33": "(VPM) Vacuum Power Module",
-        "35": "(VIM) Vacuum Input Module",
-        "36": "(DSM) Doorbell Sense Module",
-        "37": "(TSM) Telephone Sense Module"]
-
-@Field static final Map UPB_ACTIONS = [
-        "0": "Goto Off",
-        "1": "Goto On",
-        "2": "Fade Down",
-        "3": "Fade Up",
-        "4": "Fade Stop",
-        "5": "Deactivate",
-        "6": "Activate",
-        "7": "Snap Off",
-        "8": "Snap On",
-        "9": "Quick Off",
-        "10": "Quick On",
-        "11": "Slow Off",
-        "12": "Slow On",
-        "13": "Blink",
-        "14": "Null",
-        "15": "No Command"]
 
 @Field static final Map minFieldCounts = [
         '0': 6, '1': 1, '2': 3, '3': 14, '4': 6, '5': 14, '6': 15, '7': 10,
         '8': 5, '9': 5, '10': 12, '11': 12, '12': 3, '13': 7, '14': 10,
         '18': 3, '19': 3
-]
-
-@Field static final Map expectedRecordTypes = [
-        '1': ['6', '13', '17'], '2': ['4', '5'], '3': ['4', '5'], '4': ['7'],
-        '5': ['4', '5', '7'], '6': ['4', '5'], '7': ['4', '9'], '8': ['14'],
-        '9': ['15'], '10': ['16', '5', '6'], '0': []
 ]
 
 static List<List<String>> parse_csv(byte[] csvBytes) {
