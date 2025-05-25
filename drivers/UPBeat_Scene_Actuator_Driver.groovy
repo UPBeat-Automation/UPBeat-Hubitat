@@ -27,7 +27,7 @@ metadata {
  * Core Driver Functions
  ***************************************************************************/
 void installed() {
-    logTrace "installed()"
+    logTrace("installed()")
     try {
         isCorrectParent()
         // Initialize the lastTrigger attribute
@@ -40,17 +40,17 @@ void installed() {
 }
 
 def updated() {
-    logTrace "updated()"
+    logTrace("updated()")
     try {
         isCorrectParent()
         // Validate inputs
         if (settings.networkId == null || settings.networkId < 0 || settings.networkId > 255) {
-            logError "Network ID must be between 0 and 255, got: ${settings.networkId}"
+            logError("Network ID must be between 0 and 255, got: ${settings.networkId}")
             sendEvent(name: "status", value: "error", descriptionText: "Network ID must be between 0 and 255", isStateChange: true)
             return
         }
         if (settings.linkId == null || settings.linkId < 1 || settings.linkId > 250) {
-            logError "Link ID must be between 1 and 250, got: ${settings.linkId}"
+            logError("Link ID must be between 1 and 250, got: ${settings.linkId}")
             sendEvent(name: "status", value: "error", descriptionText: "Link ID must be between 1 and 250", isStateChange: true)
             return
         }
@@ -59,7 +59,7 @@ def updated() {
         if (result.success) {
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logError "Failed to update device: ${result.error}"
+            logError("Failed to update device: ${result.error}")
             sendEvent(name: "status", value: "error", descriptionText: result.error, isStateChange: true)
             return
         }
@@ -75,7 +75,7 @@ def updated() {
  * Handlers for Driver Data
  ***************************************************************************/
 def updateNetworkId(Long networkId) {
-    logTrace "updateNetworkId()"
+    logTrace("updateNetworkId()")
     try {
         isCorrectParent()
         device.updateSetting("networkId", [type: "number", value: networkId])
@@ -87,7 +87,7 @@ def updateNetworkId(Long networkId) {
 }
 
 def updateLinkId(Long linkId) {
-    logTrace "updateLinkId()"
+    logTrace("updateLinkId()")
     try {
         isCorrectParent()
         device.updateSetting("linkId", [type: "number", value: linkId])
@@ -106,7 +106,7 @@ def activate() {
     try {
         isCorrectParent()
         if (settings.networkId == null || settings.linkId == null) {
-            logError "Network ID and Link ID must be configured before activating the scene"
+            logError("Network ID and Link ID must be configured before activating the scene")
             sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
             return
         }
@@ -132,11 +132,11 @@ def activate() {
 }
 
 def deactivate() {
-    logTrace "deactivate()"
+    logTrace("deactivate()")
     try {
         isCorrectParent()
         if (settings.networkId == null || settings.linkId == null) {
-            logError "Network ID and Link ID must be configured before deactivating the scene"
+            logError("Network ID and Link ID must be configured before deactivating the scene")
             sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
             return
         }
@@ -165,31 +165,31 @@ def deactivate() {
  * UPB Receive Handlers
  ***************************************************************************/
 def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
-    logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
+    logTrace("handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})")
     try {
         isCorrectParent()
         if (settings.networkId != networkId || settings.linkId != linkId) {
-            logWarn "Received Link Event for incorrect Network ID (${networkId} vs ${settings.networkId}) or Link ID (${linkId} vs ${settings.linkId})"
+            logWarn("Received Link Event for incorrect Network ID (${networkId} vs ${settings.networkId}) or Link ID (${linkId} vs ${settings.linkId})")
             return
         }
         boolean success = false
         String timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
         switch (eventType) {
             case "UPB_ACTIVATE_LINK":
-                logDebug "Activating scene [${settings.linkId}] due to Link Event"
+                logDebug("Activating scene [${settings.linkId}] due to Link Event")
                 def lastTriggerValue = "Activated at ${timestamp} by ${(eventSource == "user") ? eventSource :  sourceId}"
-                logDebug "${lastTriggerValue}"
+                logDebug("${lastTriggerValue}")
                 sendEvent(name: "lastTrigger", value: lastTriggerValue)
                 success = true
                 break
             case "UPB_DEACTIVATE_LINK":
-                logDebug "Deactivating scene [${settings.linkId}] due to Link Event"
+                logDebug("Deactivating scene [${settings.linkId}] due to Link Event")
                 def lastTriggerValue = "Deactivated at ${timestamp} by ${(eventSource == "user") ? eventSource :  sourceId}"
                 sendEvent(name: "lastTrigger", value: lastTriggerValue)
                 success = true
                 break
             default:
-                logWarn "Unknown Link Event type: ${eventType}"
+                logWarn("Unknown Link Event type: ${eventType}")
                 sendEvent(name: "status", value: "error", descriptionText: "Unknown Link Event type: ${eventType}", isStateChange: true)
                 return
         }

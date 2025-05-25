@@ -265,7 +265,7 @@ def createDevice() {
     try {
         childDevice = addChildDevice("UPBeat", deviceConfig.driverName, deviceNetworkId, [name: settings.deviceName, label: settings.voiceName ?: settings.deviceName])
     } catch (Exception e) {
-        logError "Failed to create device: ${e.message}"
+        logError("Failed to create device: ${e.message}")
         return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
             section("Error") {
                 paragraph "Failed to create the device: ${e.message}"
@@ -285,7 +285,7 @@ def createDevice() {
     // Retrieve the device to get its numerical ID
     def createdDevice = getChildDevice(deviceNetworkId)
     if (!createdDevice) {
-        logError "Failed to retrieve newly created device with network ID ${deviceNetworkId}"
+        logError("Failed to retrieve newly created device with network ID ${deviceNetworkId}")
         return dynamicPage(name: "createDevice", title: "Device Creation Failed", nextPage: "mainPage") {
             section("Error") {
                 paragraph "Failed to retrieve the newly created device."
@@ -375,22 +375,22 @@ def mainPage() {
  * Core App Functions
  ***************************************************************************/
 void installed() {
-    logTrace "installed()"
+    logTrace("installed()")
     initialize()
 }
 
 void uninstalled() {
-    logTrace "uninstalled()"
+    logTrace("uninstalled()")
     unsubscribe()
 }
 
 void updated() {
-    logTrace "updated()"
+    logTrace("updated()")
     initialize()
 }
 
 def initialize() {
-    logTrace "initialize()"
+    logTrace("initialize()")
     getPimDevice()
     // Clear existing subscriptions to prevent duplicates
     unsubscribe()
@@ -405,17 +405,17 @@ void appButtonHandler(button) {
             logTrace("createDevice")
             // Validate inputs based on device type
             if (!settings.deviceType || !settings.deviceName || !settings.networkId) {
-                logError "Device Type, Device Name, and Network ID are required."
+                logError("Device Type, Device Name, and Network ID are required.")
                 return
             }
             if (settings.deviceType != "UPB Scene") {
                 if (!settings.deviceId || !settings.channelId) {
-                    logError "Device ID and Channel ID are required for ${settings.deviceType} devices."
+                    logError("Device ID and Channel ID are required for ${settings.deviceType} devices.")
                     return
                 }
             } else {
                 if (!settings.linkId) {
-                    logError "Link ID is required for UPB Scene devices."
+                    logError("Link ID is required for UPB Scene devices.")
                     return
                 }
             }
@@ -431,7 +431,7 @@ void appButtonHandler(button) {
             // Check for duplicate device
             def existingDevice = getChildDevice(deviceNetworkId)
             if (existingDevice) {
-                logError "A device with Network ID ${settings.networkId}, Device/Link ID ${settings.deviceType == 'UPB Scene' ? settings.linkId : settings.deviceId}, and Channel ID ${settings.channelId ?: 'N/A'} already exists."
+                logError("A device with Network ID ${settings.networkId}, Device/Link ID ${settings.deviceType == 'UPB Scene' ? settings.linkId : settings.deviceId}, and Channel ID ${settings.channelId ?: 'N/A'} already exists.")
                 return
             }
 
@@ -440,7 +440,7 @@ void appButtonHandler(button) {
             try {
                 childDevice = addChildDevice("UPBeat", settings.deviceType, deviceNetworkId, [name: settings.deviceName, label: settings.voiceName ?: settings.deviceName])
             } catch (Exception e) {
-                logError "Failed to create device: ${e.message}"
+                logError("Failed to create device: ${e.message}")
                 return
             }
 
@@ -468,12 +468,12 @@ void appButtonHandler(button) {
 
 def getPimDevice()
 {
-    logTrace "getPimDevice()"
+    logTrace("getPimDevice()")
 
     def pim = getChildDevice(pimDeviceId)
 
     if (pim == null) {
-        logDebug "Creating PIM device"
+        logDebug("Creating PIM device")
         pim = addChildDevice("UPBeat", "UPB Powerline Interface Module", pimDeviceId, [name: "UPB Powerline Interface Module"])
     }
 
@@ -481,7 +481,7 @@ def getPimDevice()
 }
 
 private String makeUri(String extraPath) {
-    logTrace "makeUri()"
+    logTrace("makeUri()")
     return getFullLocalApiServerUrl() + extraPath + "?access_token=${state.accessToken}"
 }
 
@@ -492,7 +492,7 @@ String getHubUrl() {
 }
 
 void updatePIMDevice(String ipAddress, int portNumber) {
-    logTrace "updatePIMDevice()"
+    logTrace("updatePIMDevice()")
     def pim = getPimDevice()
     // Set the device IP
     device.updateSetting("ipAddress", [value: ipAddress, type: "text"])
@@ -501,12 +501,12 @@ void updatePIMDevice(String ipAddress, int portNumber) {
 }
 
 void deleteAllDevices() {
-    logTrace "deleteAllDevices()"
+    logTrace("deleteAllDevices()")
     def devices = app.getChildDevices()
     // Delete all child devices except PIM
     devices.each { device ->
         if (device.name != "UPB Powerline Interface Module") {
-            logDebug "Deleting ${device.deviceNetworkId}"
+            logDebug("Deleting ${device.deviceNetworkId}")
             deleteChildDevice(device.deviceNetworkId)
         }
     }
@@ -516,7 +516,7 @@ void deleteAllDevices() {
  * Web Service Handlers for Configuration Application
  ***************************************************************************/
 void handleStatus() {
-    logTrace "handleStatus()"
+    logTrace("handleStatus()")
 
     def data = [
             message: "UPBeat is alive an well."
@@ -529,11 +529,11 @@ void handleStatus() {
 }
 
 void handleAddDevice() {
-    logTrace "handleAddDevice()"
+    logTrace("handleAddDevice()")
 
     def postData = request.JSON
 
-    logDebug "Received POST data: ${postData}"
+    logDebug("Received POST data: ${postData}")
 
     if ('DeviceInfo' in postData) {
         def result = addDevice(postData['DeviceInfo'])
@@ -552,11 +552,11 @@ void handleAddDevice() {
 }
 
 void handleAddScene() {
-    logTrace "handleAddScene()"
+    logTrace("handleAddScene()")
 
     def postData = request.JSON
 
-    logDebug "Received POST data: ${postData}"
+    logDebug("Received POST data: ${postData}")
 
     if ('LinkInfo' in postData) {
         def data = [
@@ -574,11 +574,11 @@ void handleAddScene() {
 }
 
 void handleUpdatePowerlineInterface() {
-    logTrace "handleUpdatePowerlineInterface()"
+    logTrace("handleUpdatePowerlineInterface()")
 
     def postData = request.JSON
 
-    logDebug "Received POST data: ${postData}"
+    logDebug("Received POST data: ${postData}")
 
     if ('PowerlineInterfaceInfo' in postData) {
         updatePIMDevice(postData['PowerlineInterfaceInfo']['IpAddress'], postData['PowerlineInterfaceInfo']['PortNumber'])
@@ -606,9 +606,9 @@ private static byte checksum(byte[] data) {
 }
 
 byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
-    logTrace "buildSceneActivateCommand()"
-    logDebug "Link ID: ${linkId}"
-    logDebug "Source ID: ${sourceId}"
+    logTrace("buildSceneActivateCommand()")
+    logDebug("Link ID: ${linkId}")
+    logDebug("Source ID: ${sourceId}")
 
     def packet = new ByteArrayOutputStream()
     packet.write([0x87, 0x04] as byte[]) // Control Word
@@ -618,12 +618,12 @@ byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sour
     packet.write(0x20) // MDID (Scene Activate)
 
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug "Checksum: ${(short) sum & 0xFF}"
+    logDebug("Checksum: ${(short) sum & 0xFF}")
     packet.write(sum)
 
     String packet_text_hex = HexUtils.byteArrayToHexString(packet.toByteArray())
 
-    logDebug "PIM Packet: ${packet_text_hex}"
+    logDebug("PIM Packet: ${packet_text_hex}")
     byte[] encoded_packet = packet_text_hex.getBytes()
 
     message = new ByteArrayOutputStream()
@@ -632,14 +632,14 @@ byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sour
     message.write(0x0D) // EOL
     pim_bytes = message.toByteArray()
 
-    logDebug "PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}"
+    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}")
     return (pim_bytes)
 }
 
 byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
-    logTrace "buildSceneDeactivateCommand()"
-    logDebug "Link ID: ${linkId}"
-    logDebug "Source ID: ${sourceId}"
+    logTrace("buildSceneDeactivateCommand()")
+    logDebug("Link ID: ${linkId}")
+    logDebug("Source ID: ${sourceId}")
 
     def packet = new ByteArrayOutputStream()
     packet.write([0x87, 0x04] as byte[]) // Control Word
@@ -649,12 +649,12 @@ byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer so
     packet.write(0x21) // MDID (Scene Deactivate)
 
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug "Checksum: ${(short) sum & 0xFF}"
+    logDebug("Checksum: ${(short) sum & 0xFF}")
     packet.write(sum)
 
     String packet_text_hex = HexUtils.byteArrayToHexString(packet.toByteArray())
 
-    logDebug "PIM Packet: ${packet_text_hex}"
+    logDebug("PIM Packet: ${packet_text_hex}")
     byte[] encoded_packet = packet_text_hex.getBytes()
 
     message = new ByteArrayOutputStream()
@@ -663,36 +663,36 @@ byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer so
     message.write(0x0D) // EOL
     pim_bytes = message.toByteArray()
 
-    logDebug "PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}"
+    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}")
     return (pim_bytes)
 }
 
 byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Integer duration, Integer channel) {
-    logDebug "buildGotoCommand()"
-    logDebug "Device ID: ${deviceId}"
-    logDebug "Duration: ${duration}"
-    logDebug "Level: ${level}"
-    logDebug "Channel: ${channel}"
+    logDebug("buildGotoCommand()")
+    logDebug("Device ID: ${deviceId}")
+    logDebug("Duration: ${duration}")
+    logDebug("Level: ${level}")
+    logDebug("Channel: ${channel}")
 
     // Validate inputs
     if (deviceId < 0 || deviceId > 255) {
-        logError "Device ID ${deviceId} is out of range (0-255)"
+        logError("Device ID ${deviceId} is out of range (0-255)")
         throw new IllegalArgumentException("Device ID must be between 0 and 255")
     }
     if (level < 0 || level > 100) {
-        logError "Level ${level} is out of range (0-100)"
+        logError("Level ${level} is out of range (0-100)")
         throw new IllegalArgumentException("Level must be between 0 and 100")
     }
     if (duration < 0 || duration > 255) {
-        logError "Duration ${duration} is out of range (0-255)"
+        logError("Duration ${duration} is out of range (0-255)")
         throw new IllegalArgumentException("Duration must be between 0 and 255")
     }
     if (channel < 0 || channel > 255) {
-        logError "Channel ${channel} is out of range (0-255)"
+        logError("Channel ${channel} is out of range (0-255)")
         throw new IllegalArgumentException("Channel must be between 0 and 255")
     }
     if (networkId < 0 || networkId > 255) {
-        logError "Network ID ${networkId} is out of range (0-255)"
+        logError("Network ID ${networkId} is out of range (0-255)")
         throw new IllegalArgumentException("Network ID must be between 0 and 255")
     }
 
@@ -707,12 +707,12 @@ byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Inte
     packet.write(channel) // Channel
 
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug "Checksum: 0x${String.format('%02X', (short)sum & 0xFF)}"
+    logDebug("Checksum: 0x${String.format('%02X', (short)sum & 0xFF)}")
     packet.write(sum)
 
     String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
 
-    logDebug "PIM Packet: ${packetTextHex}"
+    logDebug("PIM Packet: ${packetTextHex}")
     byte[] encodedPacket = packetTextHex.getBytes()
 
     message = new ByteArrayOutputStream()
@@ -721,18 +721,18 @@ byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Inte
     message.write(0x0D) // EOL
     pimBytes = message.toByteArray()
 
-    logDebug "PIM Message Encoded: ${HexUtils.byteArrayToHexString(pimBytes)}"
+    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pimBytes)}")
     return pimBytes
 }
 
 byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
     // Validate inputs
     if (deviceId < 0 || deviceId > 255) {
-        logError "Device ID ${deviceId} is out of range (0-255)"
+        logError("Device ID ${deviceId} is out of range (0-255)")
         throw new IllegalArgumentException("Device ID must be between 0 and 255")
     }
     if (networkId < 0 || networkId > 255) {
-        logError "Network ID ${networkId} is out of range (0-255)"
+        logError("Network ID ${networkId} is out of range (0-255)")
         throw new IllegalArgumentException("Network ID must be between 0 and 255")
     }
 
@@ -744,12 +744,12 @@ byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
     packet.write(0x30) // MDID (Report State Command)
 
     byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug "Checksum: 0x${String.format('%02X', (short)sum & 0xFF)}"
+    logDebug("Checksum: 0x${String.format('%02X', (short)sum & 0xFF)}")
     packet.write(sum)
 
     String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
 
-    logDebug "PIM Packet: ${packetTextHex}"
+    logDebug("PIM Packet: ${packetTextHex}")
     byte[] encodedPacket = packetTextHex.getBytes()
 
     message = new ByteArrayOutputStream()
@@ -758,7 +758,7 @@ byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
     message.write(0x0D) // EOL
     pimBytes = message.toByteArray()
 
-    logDebug "PIM Message Encoded: ${HexUtils.byteArrayToHexString(pimBytes)}"
+    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pimBytes)}")
     return pimBytes
 }
 
@@ -766,30 +766,30 @@ byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
  * Custom App Functions
  ***************************************************************************/
 def updateDeviceSettings(device, settings) {
-    logTrace "updateDeviceSettings(${device.deviceNetworkId})"
+    logTrace("updateDeviceSettings(${device.deviceNetworkId})")
     if (!settings) {
-        logError "Cannot update device ${device.deviceNetworkId}: Settings are null."
+        logError("Cannot update device ${device.deviceNetworkId}: Settings are null.")
         return [success: false, error: "Settings are null"]
     }
     try {
         // Update deviceNetworkId
         def deviceConfig = DEVICE_TYPES.find { it.value.driverName == device.typeName }?.value
         if (!deviceConfig) {
-            logError "Cannot update device ${device.deviceNetworkId}: Unknown device type."
+            logError("Cannot update device ${device.deviceNetworkId}: Unknown device type.")
             return [success: false, error: "Unknown device type"]
         }
         def newDeviceNetworkId
         if (deviceConfig.category == "scene") {
             if (!settings.networkId || !settings.linkId) {
 
-                logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId or linkId."
+                logError("Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId or linkId.")
                 return [success: false, error: "Missing networkId or linkId"]
             }
             newDeviceNetworkId = buildSceneNetworkId(settings.networkId.intValue(), settings.linkId.intValue())
         } else {
             if (!settings.networkId || !settings.deviceId || !settings.channelId) {
 
-                logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId, deviceId, or channelId."
+                logError("Cannot update deviceNetworkId for ${device.deviceNetworkId}: Missing networkId, deviceId, or channelId.")
                 return [success: false, error: "Missing networkId, deviceId, or channelId"]
             }
             newDeviceNetworkId = buildDeviceNetworkId(settings.networkId.intValue(), settings.deviceId.intValue(), settings.channelId.intValue())
@@ -797,16 +797,16 @@ def updateDeviceSettings(device, settings) {
         if (newDeviceNetworkId != device.deviceNetworkId) {
             def existingDevice = getChildDevice(newDeviceNetworkId)
             if (existingDevice && existingDevice.id != device.id) {
-                logError "Cannot update deviceNetworkId for ${device.deviceNetworkId}: ${newDeviceNetworkId} conflicts with existing device."
+                logError("Cannot update deviceNetworkId for ${device.deviceNetworkId}: ${newDeviceNetworkId} conflicts with existing device.")
                 return [success: false, error: "Device ID conflict: ${newDeviceNetworkId} is already in use"]
             }
             device.deviceNetworkId = newDeviceNetworkId
-            logDebug "Updated deviceNetworkId to ${newDeviceNetworkId} for ${device.deviceNetworkId}"
+            logDebug("Updated deviceNetworkId to ${newDeviceNetworkId} for ${device.deviceNetworkId}")
         }
-        logDebug "Updated device ${device.deviceNetworkId} settings"
+        logDebug("Updated device ${device.deviceNetworkId} settings")
         return [success: true, error: null]
     } catch (Exception e) {
-        logError "Failed to update device ${device.deviceNetworkId}: ${e.message}"
+        logError("Failed to update device ${device.deviceNetworkId}: ${e.message}")
         return [success: false, error: "Failed to update device: ${e.message}"]
     }
 }
@@ -836,22 +836,22 @@ void addDevice(deviceInfo) {
                 skipEvent = true
 
             } else {
-                logInfo "Device ${deviceNetworkId} already exists"
+                logInfo("Device ${deviceNetworkId} already exists")
             }
         } else {
-            logInfo "Skipping ${deviceNetworkId} not enabled"
+            logInfo("Skipping ${deviceNetworkId} not enabled")
         }
     }
 }
 
 boolean sendPimMessage(byte[] bytes) {
-    logTrace "sendPimMessage()"
+    logTrace("sendPimMessage()")
     def pim = getPimDevice()
     return pim.transmitMessage(bytes)
 }
 
 def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
-    logTrace "handleLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId})"
+    logTrace("handleLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId})")
     def startTime = now()
     try {
         // Enumerate all child devices, call handleLinkEvent if supported
@@ -863,23 +863,23 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
                 try {
                     device.handleLinkEvent(eventSource, eventType, networkId, sourceId, linkId)
                     processedCount++
-                    logDebug "Dispatched handleLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId}) on device ${device.label ?: device.name} (deviceId: ${device.getSetting('deviceId')})"
+                    logDebug("Dispatched handleLinkEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, linkId: ${linkId}) on device ${device.label ?: device.name} (deviceId: ${device.getSetting('deviceId')})")
                 } catch (Exception e) {
-                    logWarn "Error calling handleLinkEvent on device ${device.label ?: device.name}: ${e.message}"
+                    logWarn("Error calling handleLinkEvent on device ${device.label ?: device.name}: ${e.message}")
                 }
             } else {
-                logDebug "Skipped device ${device.label ?: device.name}: ${device.name == 'UPB Powerline Interface Module' ? 'PIM device' : 'lacks handleLinkEvent method'}"
+                logDebug("Skipped device ${device.label ?: device.name}: ${device.name == 'UPB Powerline Interface Module' ? 'PIM device' : 'lacks handleLinkEvent method'}")
             }
         }
         def elapsedTime = now() - startTime
-        logDebug "Processed link event for linkId ${linkId}: ${processedCount} of ${deviceCount} devices in ${elapsedTime}ms"
+        logDebug("Processed link event for linkId ${linkId}: ${processedCount} of ${deviceCount} devices in ${elapsedTime}ms")
     } catch (Exception e) {
-        logWarn "Failed to process PIM link event: ${e.message}"
+        logWarn("Failed to process PIM link event: ${e.message}")
     }
 }
 
 def handleDeviceEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
-    logTrace "handleDeviceEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, destinationId: ${destinationId}, messageArgs: ${messageArgs})"
+    logTrace("handleDeviceEvent(eventSource: ${eventSource}, eventType: ${eventType}, networkId: ${networkId}, sourceId: ${sourceId}, destinationId: ${destinationId}, messageArgs: ${messageArgs})")
     switch(eventType){
         case "UPB_GOTO":
             def level = messageArgs[0]
@@ -888,12 +888,12 @@ def handleDeviceEvent(String eventSource, String eventType, int networkId, int s
             def deviceId = buildDeviceNetworkId(networkId, destinationId, channel)
             def device = getChildDevice(deviceId)
             if (device == null) {
-                logWarn "No device found for ${deviceId}"
+                logWarn("No device found for ${deviceId}")
             } else {
                 try {
                     device.handleGotoEvent(eventSource, eventType, networkId, sourceId, destinationId, level, rate, channel)
                 } catch (Exception e) {
-                    logWarn "Failed to call handleGotoEvent on ${deviceId}: ${e.message}"
+                    logWarn("Failed to call handleGotoEvent on ${deviceId}: ${e.message}")
                 }
             }
             break;
@@ -904,12 +904,12 @@ def handleDeviceEvent(String eventSource, String eventType, int networkId, int s
                 def deviceId = buildDeviceNetworkId(networkId, sourceId, channel)
                 def device = getChildDevice(deviceId)
                 if (device == null) {
-                    logWarn "No device found for ${deviceId}"
+                    logWarn("No device found for ${deviceId}")
                 } else {
                     try {
                         device.handleDeviceStateReport(eventSource, eventType, networkId, destinationId, sourceId, messageArgs)
                     } catch (Exception e) {
-                        logWarn "Failed to call handleDeviceStateReport on ${deviceId}: ${e.message}"
+                        logWarn("Failed to call handleDeviceStateReport on ${deviceId}: ${e.message}")
                     }
                 }
             }

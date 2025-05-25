@@ -29,7 +29,7 @@ def buildDeviceNetworkId(int networkId, int unitId, int channel) {
 
     String deviceNetworkId = String.format("UPBeat_%02X%02X%02X", networkId, unitId, channel)
 
-    logDebug "DeviceNetworkId: ${deviceNetworkId} (networkId=${networkId}, unitId=${unitId}, channel=${channel})"
+    logDebug("DeviceNetworkId: ${deviceNetworkId} (networkId=${networkId}, unitId=${unitId}, channel=${channel})")
 
     return deviceNetworkId
 }
@@ -102,7 +102,7 @@ static List<List<String>> parse_csv(byte[] csvBytes) {
 }
 
 def processUpeFile(String userInput) {
-    logDebug "processUpeFile()"
+    logDebug("processUpeFile()")
 
     def rows = parse_csv(userInput.getBytes())
     def data = [
@@ -304,7 +304,7 @@ def processUpeFile(String userInput) {
         }
 
         if (data['systemInfo']['version'] && data['systemInfo']['version'] != UPE_FILE_VERSION) {
-            logDebug "UPE file version is ${data['systemInfo']['version']} must be ${UPE_FILE_VERSION}"
+            logDebug("UPE file version is %d must be %d", data['systemInfo']['version'], UPE_FILE_VERSION)
             return data
         }
     }

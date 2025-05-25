@@ -30,7 +30,7 @@ def getReceiveComponents() {
         if (slotInput) {
             def parts = slotInput.split(":")
             if (parts.size() < 2 || parts.size() > 3) {
-                logWarn "Invalid format in receiveComponent${slot}: ${slotInput}. Expected linkID:level, setting value removed"
+                logWarn("Invalid format in receiveComponent${slot}: ${slotInput}. Expected linkID:level, setting value removed")
                 device.updateSetting("receiveComponent${slot}", "")
                 hasErrors = true
                 return
@@ -39,21 +39,21 @@ def getReceiveComponents() {
                 def linkId = parts[0].toInteger()
                 def level = parts[1].toInteger()
                 if (linkId < 1 || linkId > 250) {
-                    logWarn "Invalid linkId in receiveComponent${slot}: ${linkId}. Must be 1-250, setting value removed"
+                    logWarn("Invalid linkId in receiveComponent${slot}: ${linkId}. Must be 1-250, setting value removed")
                     device.updateSetting("receiveComponent${slot}", "")
                     hasErrors = true
                     return
                 }
                 if (isDimmable) {
                     if (level < 0 || level > 100) {
-                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0-100 for dimmable device, setting value removed"
+                        logWarn("Invalid level in receiveComponent${slot}: ${level}. Must be 0-100 for dimmable device, setting value removed")
                         device.updateSetting("receiveComponent${slot}", "")
                         hasErrors = true
                         return
                     }
                 } else {
                     if (level != 0 && level != 100) {
-                        logWarn "Invalid level in receiveComponent${slot}: ${level}. Must be 0 or 100 for non-dimmable device, setting value removed"
+                        logWarn("Invalid level in receiveComponent${slot}: ${level}. Must be 0 or 100 for non-dimmable device, setting value removed")
                         device.updateSetting("receiveComponent${slot}", "")
                         hasErrors = true
                         return
@@ -61,18 +61,18 @@ def getReceiveComponents() {
                 }
                 def linkIdKey = linkId.toString()
                 if (components.containsKey(linkIdKey)) {
-                    logWarn "Duplicate linkId ${linkId} in receiveComponent${slot}, setting value removed"
+                    logWarn("Duplicate linkId ${linkId} in receiveComponent${slot}, setting value removed")
                     device.updateSetting("receiveComponent${slot}", "")
                     hasErrors = true
                     return
                 }
                 components[linkIdKey] = [level: level]
             } catch (NumberFormatException e) {
-                logWarn "Invalid number format in receiveComponent${slot}: ${slotInput}, setting value removed"
+                logWarn("Invalid number format in receiveComponent${slot}: ${slotInput}, setting value removed")
                 device.updateSetting("receiveComponent${slot}", "")
                 hasErrors = true
             } catch (Exception e) {
-                logWarn "Unexpected error in receiveComponent${slot}: ${e.message}, setting value removed"
+                logWarn("Unexpected error in receiveComponent${slot}: ${e.message}, setting value removed")
                 device.updateSetting("receiveComponent${slot}", "")
                 hasErrors = true
             }

@@ -75,10 +75,10 @@ metadata {
  * Core Driver Functions
  ***************************************************************************/
 void installed() {
-    logTrace "installed()"
+    logTrace("installed()")
     try {
         isCorrectParent()
-        logDebug "Installing UPB Dimming Switch"
+        logDebug("Installing UPB Dimming Switch")
         // Initialize state.receiveComponents to ensure it's not null
         device.updateDataValue("receiveComponents", JsonOutput.toJson([:]))
         sendEvent(name: "status", value: "ok", isStateChange: false)
@@ -89,12 +89,12 @@ void installed() {
 }
 
 def updated() {
-    logTrace "updated()"
+    logTrace("updated()")
     try {
         isCorrectParent()
         // Validate fadeRate (for dimmable devices)
         if (settings.fadeRate && !(settings.fadeRate in FADE_RATE_MAPPING.keySet())) {
-            logWarn "Invalid fade rate: ${settings.fadeRate}. Using device default."
+            logWarn("Invalid fade rate: ${settings.fadeRate}. Using device default.")
             device.updateSetting("fadeRate", [value: "Default", type: "string"])
         }
 
@@ -103,7 +103,7 @@ def updated() {
         if (result.success) {
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logError "Failed to update device: ${result.error}"
+            logError("Failed to update device: ${result.error}")
             sendEvent(name: "status", value: "error", descriptionText: result.error, isStateChange: true)
             return
         }
@@ -119,7 +119,7 @@ def updated() {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
-        logWarn "Failed to update: ${e.message}"
+        logWarn("Failed to update: ${e.message}")
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
 }
@@ -128,7 +128,7 @@ def updated() {
  * Handlers for Driver Data
  ***************************************************************************/
 def updateNetworkId(int networkId) {
-    logTrace "updateNetworkId(${networkId})"
+    logTrace("updateNetworkId(${networkId})")
     try {
         isCorrectParent()
         device.updateSetting("networkId", [type: "number", value: networkId])
@@ -140,7 +140,7 @@ def updateNetworkId(int networkId) {
 }
 
 def updateDeviceId(int deviceId) {
-    logTrace "updateDeviceId(${deviceId})"
+    logTrace("updateDeviceId(${deviceId})")
     try {
         isCorrectParent()
         device.updateSetting("deviceId", [type: "number", value: deviceId])
@@ -152,7 +152,7 @@ def updateDeviceId(int deviceId) {
 }
 
 def updateChannelId(int channelId) {
-    logTrace "updateChannelId(${channelId})"
+    logTrace("updateChannelId(${channelId})")
     try {
         isCorrectParent()
         device.updateSetting("channelId", [type: "number", value: channelId])
@@ -164,7 +164,7 @@ def updateChannelId(int channelId) {
 }
 
 def updateReceiveComponentSlot(int slot, int linkId, int level) {
-    logTrace "updateReceiveComponentSlot(${slot})"
+    logTrace("updateReceiveComponentSlot(${slot})")
     try {
         isCorrectParent()
         device.updateSetting("receiveComponent${slot}", [type: "string", value: "${linkId}:${level}"])
@@ -179,13 +179,13 @@ def updateReceiveComponentSlot(int slot, int linkId, int level) {
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def refresh() {
-    logTrace "refresh()"
+    logTrace("refresh()")
     try {
         isCorrectParent()
         byte[] data = getParent().buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
-        logDebug "UPB Device State Request Command [${data}]"
+        logDebug("UPB Device State Request Command [${data}]")
         if (getParent().sendPimMessage(data)) {
-            logDebug "Device State Request successfully sent [${data}]"
+            logDebug("Device State Request successfully sent [${data}]")
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
             def error = "Failed to issue Device State Request command [${data}]"
@@ -196,20 +196,20 @@ def refresh() {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
-        logWarn "Call to refresh failed: ${e.message}"
+        logWarn("Call to refresh failed: ${e.message}")
         sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
     }
 }
 
 def flash(BigDecimal rateToFlash) {
-    logTrace "flash(${rateToFlash})"
+    logTrace("flash(${rateToFlash})")
     try {
         isCorrectParent()
-        logDebug "Flash Rate [${rateToFlash}]"
+        logDebug("Flash Rate [${rateToFlash}]")
         byte[] data = getParent().blinkCommand(settings.networkId.intValue(), settings.deviceId.intValue(), rateToFlash, settings.channelId.intValue())
-        logDebug "UPB Flash Command[${data}]"
+        logDebug("UPB Flash Command[${data}]")
         if (getParent().sendPimMessage(data)) {
-            logDebug "UPB Flash [${data}]"
+            logDebug("UPB Flash [${data}]")
             sendEvent(name: "switch", value: "on", isStateChange: true)
             sendEvent(name: "level", value: 100, isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
@@ -225,15 +225,15 @@ def flash(BigDecimal rateToFlash) {
 }
 
 def on() {
-    logTrace "on()"
+    logTrace("on()")
     try {
         isCorrectParent()
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
-        logDebug "Sending ON to device [${settings.deviceId}] at rate [${rate}]"
+        logDebug("Sending ON to device [${settings.deviceId}] at rate [${rate}]")
         byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, rate, settings.channelId.intValue())
-        logDebug "UPB Command Goto [${data}]"
+        logDebug("UPB Command Goto [${data}]")
         if (getParent().sendPimMessage(data)) {
-            logDebug "Command successfully sent [${data}]"
+            logDebug("Command successfully sent [${data}]")
             sendEvent(name: "switch", value: "on", isStateChange: true)
             sendEvent(name: "level", value: 100, unit: "%", isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
@@ -246,21 +246,21 @@ def on() {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
-        logWarn "Call to on failed: ${e.message}"
+        logWarn("Call to on failed: ${e.message}")
         sendEvent(name: "status", value: "error", descriptionText: "On command failed: ${e.message}", isStateChange: true)
     }
 }
 
 def off() {
-    logTrace "off()"
+    logTrace("off()")
     try {
         isCorrectParent()
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
-        logDebug "Sending OFF to device [${settings.deviceId}] at rate [${rate}]"
+        logDebug("Sending OFF to device [${settings.deviceId}] at rate [${rate}]")
         byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, rate, settings.channelId.intValue())
-        logDebug "UPB Command Goto [${data}]"
+        logDebug("UPB Command Goto [${data}]")
         if (getParent().sendPimMessage(data)) {
-            logDebug "Command successfully sent [${data}]"
+            logDebug("Command successfully sent [${data}]")
             sendEvent(name: "switch", value: "off", isStateChange: true)
             sendEvent(name: "level", value: 0, unit: "%", isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
@@ -273,13 +273,13 @@ def off() {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
-        logWarn "Call to off failed: ${e.message}"
+        logWarn("Call to off failed: ${e.message}")
         sendEvent(name: "status", value: "error", descriptionText: "Off command failed: ${e.message}", isStateChange: true)
     }
 }
 
 def setLevel(value, duration = null) {
-    logTrace "setLevel(${value}, ${duration})"
+    logTrace("setLevel(${value}, ${duration})")
     try {
         isCorrectParent()
         // Validate and clamp level
@@ -293,15 +293,15 @@ def setLevel(value, duration = null) {
         } else {
             rate = settings.fadeRate && FADE_RATE_MAPPING.containsKey(settings.fadeRate) ? FADE_RATE_MAPPING[settings.fadeRate] : 255
             if (duration != null) {
-                logWarn "Invalid duration '${duration}'. Using default fade rate: ${settings.fadeRate ?: 'Default'} (rate=${rate})"
+                logWarn("Invalid duration '${duration}'. Using default fade rate: ${settings.fadeRate ?: 'Default'} (rate=${rate})")
             }
         }
 
-        logDebug "Sending Set-Percent to device [${settings.deviceId}] with level=${level}, rate=${rate} (duration=${duration ?: 'not specified'})"
+        logDebug("Sending Set-Percent to device [${settings.deviceId}] with level=${level}, rate=${rate} (duration=${duration ?: 'not specified'})")
         byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), level, rate, settings.channelId.intValue())
-        logDebug "UPB Command Goto level [${data}]"
+        logDebug("UPB Command Goto level [${data}]")
         if (getParent().sendPimMessage(data)) {
-            logDebug "Command successfully sent [${data}]"
+            logDebug("Command successfully sent [${data}]")
             // Update switch and level attributes
             sendEvent(name: "switch", value: level > 0 ? "on" : "off", isStateChange: true)
             sendEvent(name: "level", value: level, unit: "%", isStateChange: true)
@@ -315,7 +315,7 @@ def setLevel(value, duration = null) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
-        logWarn "Call to setLevel failed: ${e.message}"
+        logWarn("Call to setLevel failed: ${e.message}")
         sendEvent(name: "status", value: "error", descriptionText: "SetLevel command failed: ${e.message}", isStateChange: true)
     }
 }
@@ -324,7 +324,7 @@ def setLevel(value, duration = null) {
  * UPB Receive Component Handlers
  ***************************************************************************/
 def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
-    logTrace "handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})"
+    logTrace("handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})")
     try {
         isCorrectParent()
         // Retrieve and deserialize the receiveComponents map from data
@@ -362,7 +362,7 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
             sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug "No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration."
+            logDebug("No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration.")
             sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         }
@@ -374,11 +374,11 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
 
 def handleGotoEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int level, int rate, int channel)
 {
-    logTrace "handleGotoEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, level=${level}, rate=${rate}, channel=${channel})"
+    logTrace("handleGotoEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, level=${level}, rate=${rate}, channel=${channel})")
     try {
         isCorrectParent()
         def switchValue = (level == 0) ? "off" : "on"
-        logDebug "Updating switch to ${switchValue}, level to ${level} for device [${settings.deviceId}]"
+        logDebug("Updating switch to ${switchValue}, level to ${level} for device [${settings.deviceId}]")
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "level", value: level, isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
@@ -390,14 +390,14 @@ def handleGotoEvent(String eventSource, String eventType, int networkId, int sou
 
 
 def handleDeviceStateReport(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
-    logTrace "handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})"
+    logTrace("handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})")
     try {
         isCorrectParent()
         int channel = settings.channelId.intValue() - 1
         int level = messageArgs.size() > channel ? Math.min(messageArgs[channel], 100) : 0
 
         def switchValue = (level == 0) ? "off" : "on"
-        logDebug "Updating switch to ${switchValue}, level to ${level} for device [${settings.deviceId}]"
+        logDebug("Updating switch to ${switchValue}, level to ${level} for device [${settings.deviceId}]")
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "level", value: level, isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
