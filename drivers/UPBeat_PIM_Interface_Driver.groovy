@@ -253,7 +253,7 @@ def parse(hexMessage) {
             messageData = messageBytes[2..-1]
             String messageDataString = new String(messageData)
             messageData = HexUtils.hexStringToByteArray(messageDataString)
-            logTrace("[%s]: Data=[%s]", asciiMessage, messageData)
+            logTrace("[%s]: Data=%s", asciiMessage, messageData)
         }
 
         def responseEntry = deviceResponses.get(device.deviceNetworkId)
@@ -413,7 +413,7 @@ def setPortNumber(int portNumber) {
     }
 }
 
-def getCommandModeMessage() {
+byte[] getCommandModeMessage() {
     logTrace "getCommandModeMessage()"
     def packet = new ByteArrayOutputStream()
     packet.write([0x70, 0x02] as byte[]) // Control Word
@@ -425,17 +425,18 @@ def getCommandModeMessage() {
 
     logDebug "PIM Packet: ${packetTextHex}"
 
-    byte[] encodedPacket = packetTextHex.getBytes()
+    def encodedPacket = packetTextHex.getBytes()
 
     message = new ByteArrayOutputStream()
-    message.write(0x17) // Write Register
+    message.write(0x17 as byte) // Write Register
     message.write(encodedPacket) // UPB Message + Checksum
-    message.write(0x0D) // EOL
-    def pimBytes = message.toByteArray()
+    message.write(0x0D as byte) // EOL
 
-    logDebug "PIM Message Encoded: ${HexUtils.byteArrayToHexString(pimBytes)}"
+    byte[] messageBytes = message.toByteArray()
 
-    return pimBytes
+    logDebug("PIM Message Encoded: %s", messageBytes)
+
+    return messageBytes
 }
 
 def setPIMCommandMode() {
@@ -455,7 +456,7 @@ def setPIMCommandMode() {
 
 def transmitMessage(byte[] bytes) {
     synchronized (deviceMutexes.get(device.deviceNetworkId)) {
-        logTrace "transmitMessage()"
+        logTrace("transmitMessage()")
         long retry = 0
         boolean exit = false
         String sendStatus = 'None'
@@ -468,7 +469,7 @@ def transmitMessage(byte[] bytes) {
                     responseEntry.response = 'None'
                     responseEntry.semaphore.drainPermits() // Reset permits to 0
                     sendBytes(bytes)
-                    logDebug "Sent UPB Message"
+                    logDebug "Message sent to PIM."
                     break
                 case 'Sent':
                     // Wait for the response to be set by parse()
@@ -485,7 +486,7 @@ def transmitMessage(byte[] bytes) {
                                 sendStatus = 'Retry'
                                 break
                             default:
-                                logError "PIM response is invalid ${response}"
+                                logError "PIM response is invalid ${response}."
                                 sendStatus = 'Failed'
                                 break
                         }
@@ -496,7 +497,7 @@ def transmitMessage(byte[] bytes) {
                     break
                 case 'Retry':
                     if (retry++ < maxRetry) {
-                        logWarn "Retrying to send message."
+                        logDebug "Retrying to send message to PIM."
                         sendBytes(bytes)
                         sendStatus = 'Sent'
                     } else {
@@ -505,16 +506,15 @@ def transmitMessage(byte[] bytes) {
                     }
                     break
                 case 'Failed':
-                    logError "UPB Message could not be sent."
+                    logError "Message could not be sent."
                     exit = true
                     break
                 case 'Success':
-                    logInfo "UPB Message sent successfully."
+                    logDebug "Message was sent successfully."
                     exit = true
                     break
             }
         }
-
         return responseEntry.response == 'PA'
     }
 }
@@ -534,7 +534,7 @@ def asyncParseMessageReport(Map data) {
 }
 
 def parseMessageReport(byte[] data) {
-    logTrace "parseMessageReport()"
+    logTrace("parseMessageReport(%s)",data)
     def messageDataString = HexUtils.byteArrayToHexString(data)
 
     // Validate packet length
@@ -547,7 +547,7 @@ def parseMessageReport(byte[] data) {
     byte sum = 0
     data.each { b -> sum += (b & 0xFF) } // Unsigned summation
     if (sum != 0) {
-        logError("[%s]: Invalid checksum CHK=0x%02X (%hhu)", messageDataString, sum, sum)
+        logError("[%s]: Invalid checksum CHK=0x%02X (%d)", messageDataString, sum, sum)
         return
     }
 
@@ -556,7 +556,7 @@ def parseMessageReport(byte[] data) {
     byte networkId = data[2]
     byte destinationId = data[3]
     byte sourceId = data[4]
-    logTrace("[%s]: HDR Control=0x%04X (%d), NID=0x%02X (%hhu), DID=0x%02X (%hhu), SID=0x%02X (%hhu)",
+    logTrace("[%s]: HDR Control=0x%04X (%d), NID=0x%02X (%d), DID=0x%02X (%d), SID=0x%02X (%d)",
             messageDataString, controlWord, controlWord,
             networkId, networkId,
             destinationId, destinationId,
@@ -573,7 +573,7 @@ def parseMessageReport(byte[] data) {
     byte messageSetId = (messageDataId >> 5) & 0x07
     byte messageId = messageDataId & 0x1F
 
-    logTrace("[%s]: MDID=0x%02X (%hhu), MSID=0x%02X (%hhu), MID=0x%02X (%hhu)",
+    logTrace("[%s]: MDID=0x%02X (%d), MSID=0x%02X (%d), MID=0x%02X (%d)",
             messageDataString,
             messageDataId, messageDataId,
             messageSetId,messageSetId,
@@ -585,11 +585,11 @@ def parseMessageReport(byte[] data) {
         messageArgs = messageContent[1..-1]
     }
 
-    logTrace "[%s]: MDA=[%s]", messageDataString, messageArgs
+    logTrace("[%s]: MDA=%s", messageDataString, messageArgs)
 
     switch(messageSetId) {
         case UPB_CORE_COMMAND:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -600,7 +600,7 @@ def parseMessageReport(byte[] data) {
             processCoreCommand(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         case UPB_DEVICE_CONTROL_COMMAND:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -611,7 +611,7 @@ def parseMessageReport(byte[] data) {
             processDeviceControlCommand(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         case UPB_RESERVED_COMAND_SET_1:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -621,7 +621,7 @@ def parseMessageReport(byte[] data) {
                     messageArgs)
             break
         case UPB_RESERVED_COMAND_SET_2:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -631,7 +631,7 @@ def parseMessageReport(byte[] data) {
                     messageArgs)
             break
         case UPB_CORE_REPORTS:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -642,7 +642,7 @@ def parseMessageReport(byte[] data) {
             processCoreReport(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         case UPB_RESERVED_REPORT_SET_1:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -652,7 +652,7 @@ def parseMessageReport(byte[] data) {
                     messageArgs)
             break
         case UPB_RESERVED_REPORT_SET_2:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -662,7 +662,7 @@ def parseMessageReport(byte[] data) {
                     messageArgs)
             break
         case UPB_EXTENDED_MESSAGE_SET:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -673,7 +673,7 @@ def parseMessageReport(byte[] data) {
             processExtendedMessage(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
             break
         default:
-            logError("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s]",
+            logError("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
                     getMsidName(messageSetId), messageSetId,
                     controlWord, controlWord,
                     networkId, networkId,
@@ -686,7 +686,7 @@ def parseMessageReport(byte[] data) {
 }
 
 void processCoreCommand(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processCoreCommand(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=%s)",
+    logTrace("processCoreCommand(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
             controlWord, controlWord,
             networkId, networkId,
             destinationId, destinationId,
@@ -696,7 +696,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
 
     switch(messageDataId) {
         case UPB_NULL_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -704,7 +704,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_WRITE_ENABLED_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -712,7 +712,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_WRITE_PROTECT_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -720,7 +720,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_START_SETUP_MODE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -728,7 +728,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_STOP_SETUP_MODE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -736,7 +736,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_GET_SETUP_TIME_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -744,7 +744,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_AUTO_ADDRESS_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -752,7 +752,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_GET_DEVICE_STATUS_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -760,7 +760,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_SET_DEVICE_CONTROL_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -768,7 +768,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_ADD_LINK_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -776,7 +776,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_DEL_LINK_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -784,7 +784,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_TRANSMIT_MESSAGE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -792,7 +792,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_DEVICE_RESET_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -800,7 +800,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_GET_DEVICE_SIG_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -808,7 +808,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_GET_REGISTER_VALUE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -816,7 +816,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         case UPB_SET_REGISTER_VALUE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -824,7 +824,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
                     messageArgs)
             break
         default:
-            logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -835,7 +835,7 @@ void processCoreCommand(short controlWord, byte networkId, byte destinationId, b
 }
 
 void processDeviceControlCommand(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processDeviceControlCommand(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s])",
+    logTrace("processDeviceControlCommand(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
             controlWord, controlWord,
             networkId, networkId,
             destinationId, destinationId,
@@ -845,7 +845,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
 
     switch(messageDataId) {
         case UPB_ACTIVATE_LINK:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), linkId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), linkId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -854,7 +854,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
             getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_DEACTIVATE_LINK:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), linkId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), linkId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -863,7 +863,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
             getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
             break
         case UPB_GOTO:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -873,7 +873,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
             getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_FADE_START:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -881,7 +881,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
                     messageArgs)
             break
         case UPB_FADE_STOP:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -889,7 +889,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
                     messageArgs)
             break
         case UPB_BLINK:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -897,7 +897,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
                     messageArgs)
             break
         case UPB_INDICATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -905,7 +905,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
                     messageArgs)
             break
         case UPB_TOGGLE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -913,7 +913,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
                     messageArgs)
             break
         case UPB_REPORT_STATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -921,7 +921,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
                     messageArgs)
             break
         case UPB_STORE_STATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -929,7 +929,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
                     messageArgs)
             break
         default:
-            logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -940,7 +940,7 @@ void processDeviceControlCommand(short controlWord, byte networkId, byte destina
 }
 
 void processCoreReport(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processCoreReport(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s])",
+    logTrace("processCoreReport(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
             controlWord, controlWord,
             networkId, networkId,
             destinationId, destinationId,
@@ -950,7 +950,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
     def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
     switch(messageDataId) {
         case UPB_ACK_RESPONSE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -958,7 +958,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         case UPB_SETUP_TIME:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -966,7 +966,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         case UPB_DEVICE_STATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -980,7 +980,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
             getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
             break
         case UPB_DEVICE_STATUS:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -988,7 +988,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         case UPB_DEVICE_SIG:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -996,7 +996,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         case UPB_REGISTER_VALUES:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -1004,7 +1004,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         case UPB_RAM_VALUES:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -1012,7 +1012,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         case UPB_RAW_DATA:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -1020,7 +1020,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         case UPB_HEARTBEAT:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -1028,7 +1028,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
                     messageArgs)
             break
         default:
-            logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+            logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
                     getMdidName(messageDataId), messageDataId,
                     networkId, networkId,
                     sourceId, sourceId,
@@ -1039,7 +1039,7 @@ void processCoreReport(short controlWord, byte networkId, byte destinationId, by
 }
 
 void processExtendedMessage(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processExtendedMessage(controlWord=0x%04X (%d), networkId=0x%02X (%hhu), destinationId=0x%02X (%hhu), sourceId=0x%02X (%hhu), messageDataId=0x%02X (%hhu), messageArgs=[%s])",
+    logTrace("processExtendedMessage(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
             controlWord, controlWord,
             networkId, networkId,
             destinationId, destinationId,
@@ -1047,7 +1047,7 @@ void processExtendedMessage(short controlWord, byte networkId, byte destinationI
             messageDataId,messageDataId,
             messageArgs)
 
-    logError("Handling %s (0x%02X) networkId=0x%02X (%hhu), sourceId=0x%02X (%hhu), destinationId=0x%02X (%hhu), messageArgs=[%s]",
+    logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
             getMdidName(messageDataId), messageDataId,
             networkId, networkId,
             sourceId, sourceId,
