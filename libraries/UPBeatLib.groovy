@@ -138,7 +138,6 @@ def processUpeFile(String userInput) {
                 data['links'].add(['linkId': row[1].toInteger(), 'name': row[2]])
                 break
             case "3": // Module
-                logDebug(row)
                 current_device = ["moduleId": row[1].toInteger(),
                                   "networkId": row[2].toInteger(),
                                   "productId": row[3].toInteger(),
