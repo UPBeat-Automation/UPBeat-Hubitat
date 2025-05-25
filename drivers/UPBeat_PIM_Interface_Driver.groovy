@@ -215,6 +215,9 @@ def socketStatus(message) {
 
 def parse(hexMessage) {
     logTrace("parse(%s)" , hexMessage)
+    // When driver is updated, th deviceMutexes and deviceResponses get destroyed, so we ensure they exist.
+    deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
+    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', semaphore: new Semaphore(0)])
     try {
         isCorrectParent()
         logDebug("Message Received: [${hexMessage}]")
@@ -454,6 +457,9 @@ def setPIMCommandMode() {
 }
 
 def transmitMessage(byte[] bytes) {
+    // When driver is updated, the deviceMutexes and deviceResponses get destroyed, so we ensure they exist.
+    deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
+    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', semaphore: new Semaphore(0)])
     synchronized (deviceMutexes.get(device.deviceNetworkId)) {
         logTrace("transmitMessage()")
         long retry = 0
