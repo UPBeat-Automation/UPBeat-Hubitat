@@ -105,29 +105,35 @@ def activate() {
     logTrace("activate()")
     try {
         isCorrectParent()
-        if (settings.networkId == null || settings.linkId == null) {
-            logError("Network ID and Link ID must be configured before activating the scene")
-            sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
-            return
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
         }
+        if (!settings.linkId || settings.linkId < 0 || settings.linkId > 255) {
+            logError("Link ID ${settings.linkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Link ID must be 0-255")
+        }
+
         def networkId = settings.networkId.intValue()
         def linkId = settings.linkId.intValue()
         logDebug("Sending activate to scene [${linkId}] on Network ID [${networkId}]")
-        byte[] data = getParent().buildSceneActivateCommand(networkId, linkId, 0)
-        logDebug("UPB Command Activate [${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Command successfully sent [${data}]")
-            getParent().handleLinkEvent("user", "UPB_ACTIVATE_LINK", networkId, 0, linkId)
-        } else {
-            logDebug("Failed to issue command [${data}]")
-            sendEvent(name: "status", value: "error", descriptionText: "Failed to send activate command", isStateChange: true)
-        }
+        getParent().activateScene(networkId, linkId, 0)
+        logDebug("Scene activation succeeded")
+        getParent().handleLinkEvent("user", "UPB_ACTIVATE_LINK", networkId, 0, linkId)
+        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("Scene activation failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     } catch (Exception e) {
-        logWarn("Call to scene activate failed: ${e.message}")
+        logWarn("Scene activation failed: %s", e.message)
         sendEvent(name: "status", value: "error", descriptionText: "Scene activate failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
 
@@ -135,32 +141,37 @@ def deactivate() {
     logTrace("deactivate()")
     try {
         isCorrectParent()
-        if (settings.networkId == null || settings.linkId == null) {
-            logError("Network ID and Link ID must be configured before deactivating the scene")
-            sendEvent(name: "status", value: "error", descriptionText: "Network ID and Link ID must be configured", isStateChange: true)
-            return
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
         }
+        if (!settings.linkId || settings.linkId < 0 || settings.linkId > 255) {
+            logError("Link ID ${settings.linkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Link ID must be 0-255")
+        }
+
         def networkId = settings.networkId.intValue()
         def linkId = settings.linkId.intValue()
         logDebug("Sending deactivate to scene [${linkId}] on Network ID [${networkId}]")
-        byte[] data = getParent().buildSceneDeactivateCommand(networkId, linkId, 0)
-        logDebug("UPB Command Deactivate [${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Command successfully sent [${data}]")
-            getParent().handleLinkEvent("user", "UPB_DEACTIVATE_LINK", networkId, 0, linkId)
-        } else {
-            logDebug("Failed to issue command [${data}]")
-            sendEvent(name: "status", value: "error", descriptionText: "Failed to send deactivate command", isStateChange: true)
-        }
+        getParent().deactivateScene(networkId, linkId, 0)
+        logDebug("Scene deactivation succeeded")
+        getParent().handleLinkEvent("user", "UPB_DEACTIVATE_LINK", networkId, 0, linkId)
+        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("Scene deactivation failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     } catch (Exception e) {
-        logWarn("Call to scene deactivate failed: ${e.message}")
+        logWarn("Scene deactivation failed: %s", e.message)
         sendEvent(name: "status", value: "error", descriptionText: "Scene deactivate failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
-
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
