@@ -354,6 +354,8 @@ def mainPage() {
             input name: "enableConfig", type: "bool", title: "Enable Remote Configuration", defaultValue: false, submitOnChange: true
         }
         section("Devices") {
+            input "refreshAllDeviceStates", "button", title: "Refresh All Devices States"
+
             if (app.getInstallationState() == "COMPLETE") {
                 href(name: "manualAddHref", title: "Manually Add Device", page: "addDevicePage", description: "Add a device manually")
                 href(name: "manualAddHref", title: "Bulk Import", page: "bulkImportPage", description: "Import UPStart export file")
@@ -400,6 +402,7 @@ def initialize() {
  * App Helper Functions
  ***************************************************************************/
 void appButtonHandler(button) {
+    logTrace("appButtonHandler(%s)", button)
     switch(button) {
         case "addDeviceBtn":
             logTrace("createDevice")
@@ -463,6 +466,9 @@ void appButtonHandler(button) {
             app.removeSetting("deviceType")
             app.removeSetting("linkId")
             break
+        case "refreshAllDeviceStates":
+            refreshAllDeviceStates()
+            break;
     }
 }
 
@@ -505,9 +511,21 @@ void deleteAllDevices() {
     def devices = app.getChildDevices()
     // Delete all child devices except PIM
     devices.each { device ->
-        if (device.name != "UPB Powerline Interface Module") {
+        if (device.typeName != "UPB Powerline Interface Module") {
             logDebug("Deleting ${device.deviceNetworkId}")
             deleteChildDevice(device.deviceNetworkId)
+        }
+    }
+}
+
+def refreshAllDeviceStates() {
+    logTrace("refreshAllDeviceStates()")
+    def devices = app.getChildDevices()
+    devices.each { device ->
+        if (device.typeName != "UPB Powerline Interface Module" && !device.typeName.contains("Scene")) {
+            logInfo("Refreshing ${device.deviceNetworkId} [${device.name}]")
+            device.refresh()
+            pauseExecution(1000)
         }
     }
 }
@@ -616,24 +634,7 @@ byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sour
     packet.write(linkId) // Link ID
     packet.write(sourceId) // Source ID (PIM)
     packet.write(0x20) // MDID (Scene Activate)
-
-    byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug("Checksum: ${(short) sum & 0xFF}")
-    packet.write(sum)
-
-    String packet_text_hex = HexUtils.byteArrayToHexString(packet.toByteArray())
-
-    logDebug("PIM Packet: ${packet_text_hex}")
-    byte[] encoded_packet = packet_text_hex.getBytes()
-
-    message = new ByteArrayOutputStream()
-    message.write(0x14) // Transmit Byte
-    message.write(encoded_packet) // UPB Message + Checksum
-    message.write(0x0D) // EOL
-    pim_bytes = message.toByteArray()
-
-    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}")
-    return (pim_bytes)
+    return packet.toByteArray()
 }
 
 byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
@@ -647,24 +648,7 @@ byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer so
     packet.write(linkId) // Link ID
     packet.write(sourceId) // Source ID (PIM)
     packet.write(0x21) // MDID (Scene Deactivate)
-
-    byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug("Checksum: ${(short) sum & 0xFF}")
-    packet.write(sum)
-
-    String packet_text_hex = HexUtils.byteArrayToHexString(packet.toByteArray())
-
-    logDebug("PIM Packet: ${packet_text_hex}")
-    byte[] encoded_packet = packet_text_hex.getBytes()
-
-    message = new ByteArrayOutputStream()
-    message.write(0x14) // Transmit Byte
-    message.write(encoded_packet) // UPB Message + Checksum
-    message.write(0x0D) // EOL
-    pim_bytes = message.toByteArray()
-
-    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pim_bytes)}")
-    return (pim_bytes)
+    return packet.toByteArray()
 }
 
 byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Integer duration, Integer channel) {
@@ -705,24 +689,7 @@ byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Inte
     packet.write(level) // Level
     packet.write(duration) // Rate
     packet.write(channel) // Channel
-
-    byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug("Checksum: 0x${String.format('%02X', (short)sum & 0xFF)}")
-    packet.write(sum)
-
-    String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
-
-    logDebug("PIM Packet: ${packetTextHex}")
-    byte[] encodedPacket = packetTextHex.getBytes()
-
-    message = new ByteArrayOutputStream()
-    message.write(0x14) // Transmit Byte
-    message.write(encodedPacket) // UPB Message + Checksum
-    message.write(0x0D) // EOL
-    pimBytes = message.toByteArray()
-
-    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pimBytes)}")
-    return pimBytes
+    return packet.toByteArray()
 }
 
 byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
@@ -743,23 +710,7 @@ byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
     packet.write(0x00) // Source ID (PIM)
     packet.write(0x30) // MDID (Report State Command)
 
-    byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug("Checksum: 0x${String.format('%02X', (short)sum & 0xFF)}")
-    packet.write(sum)
-
-    String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
-
-    logDebug("PIM Packet: ${packetTextHex}")
-    byte[] encodedPacket = packetTextHex.getBytes()
-
-    message = new ByteArrayOutputStream()
-    message.write(0x14) // Transmit Byte
-    message.write(encodedPacket) // UPB Message + Checksum
-    message.write(0x0D) // EOL
-    pimBytes = message.toByteArray()
-
-    logDebug("PIM Message Encoded: ${HexUtils.byteArrayToHexString(pimBytes)}")
-    return pimBytes
+    return packet.toByteArray()
 }
 
 /***************************************************************************
