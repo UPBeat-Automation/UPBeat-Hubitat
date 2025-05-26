@@ -15,6 +15,7 @@ import java.util.UUID
 
 #include UPBeat.UPBeatLogger
 #include UPBeat.UPBeatLib
+#include UPBeat.UPBProtocolLib
 
 @Field static Map DEVICE_TYPES = [
         "non_dimming_switch": [
@@ -618,99 +619,129 @@ void handleUpdatePowerlineInterface() {
 /***************************************************************************
  * Custom App Functions
  ***************************************************************************/
-private static byte checksum(byte[] data) {
-    byte sum = data.sum()
-    return (~sum + 1)
-}
-
-byte[] buildSceneActivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
-    logTrace("buildSceneActivateCommand()")
-    logDebug("Link ID: ${linkId}")
-    logDebug("Source ID: ${sourceId}")
-
-    def packet = new ByteArrayOutputStream()
-    packet.write([0x87, 0x04] as byte[]) // Control Word
-    packet.write(networkId) // Network ID
-    packet.write(linkId) // Link ID
-    packet.write(sourceId) // Source ID (PIM)
-    packet.write(0x20) // MDID (Scene Activate)
-    return packet.toByteArray()
-}
-
-byte[] buildSceneDeactivateCommand(Integer networkId, Integer linkId, Integer sourceId) {
-    logTrace("buildSceneDeactivateCommand()")
-    logDebug("Link ID: ${linkId}")
-    logDebug("Source ID: ${sourceId}")
-
-    def packet = new ByteArrayOutputStream()
-    packet.write([0x87, 0x04] as byte[]) // Control Word
-    packet.write(networkId) // Network ID
-    packet.write(linkId) // Link ID
-    packet.write(sourceId) // Source ID (PIM)
-    packet.write(0x21) // MDID (Scene Deactivate)
-    return packet.toByteArray()
-}
-
-byte[] buildGotoCommand(Integer networkId, Integer deviceId, Integer level, Integer duration, Integer channel) {
-    logDebug("buildGotoCommand()")
-    logDebug("Device ID: ${deviceId}")
-    logDebug("Duration: ${duration}")
-    logDebug("Level: ${level}")
-    logDebug("Channel: ${channel}")
+def activateScene(Integer networkId, Integer linkId, Integer sourceId) {
+    logTrace("activateScene(networkId=0x%02X, linkId=0x%02X, sourceId=0x%02X)", networkId, linkId, sourceId)
 
     // Validate inputs
+    if (networkId < 0 || networkId > 255) {
+        logError("Network ID ${networkId} is out of range (0-255)")
+        throw new IllegalArgumentException("Network ID must be 0-255")
+    }
+    if (linkId < 0 || linkId > 255) {
+        logError("Link ID ${linkId} is out of range (0-255)")
+        throw new IllegalArgumentException("Link ID must be 0-255")
+    }
+    if (sourceId < 0 || sourceId > 255) {
+        logError("Source ID ${sourceId} is out of range (0-255)")
+        throw new IllegalArgumentException("Source ID must be 0-255")
+    }
+
+    def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, 6, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    try {
+        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_ACTIVATE_LINK, null)
+        logDebug("Scene activation succeeded")
+        return true
+    } catch (RuntimeException e) {
+        logError("Scene activation failed: %s", e.message)
+        throw e
+    }
+}
+
+def deactivateScene(Integer networkId, Integer linkId, Integer sourceId) {
+    logTrace("deactivateScene(networkId=0x%02X, linkId=0x%02X, sourceId=0x%02X)", networkId, linkId, sourceId)
+
+    // Validate inputs
+    if (networkId < 0 || networkId > 255) {
+        logError("Network ID ${networkId} is out of range (0-255)")
+        throw new IllegalArgumentException("Network ID must be 0-255")
+    }
+    if (linkId < 0 || linkId > 255) {
+        logError("Link ID ${linkId} is out of range (0-255)")
+        throw new IllegalArgumentException("Link ID must be 0-255")
+    }
+    if (sourceId < 0 || sourceId > 255) {
+        logError("Source ID ${sourceId} is out of range (0-255)")
+        throw new IllegalArgumentException("Source ID must be 0-255")
+    }
+
+    def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, 6, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    try {
+        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_DEACTIVATE_LINK, null)
+        logDebug("Scene deactivation succeeded")
+        return true
+    } catch (RuntimeException e) {
+        logError("Scene deactivation failed: %s", e.message)
+        throw e
+    }
+}
+
+def gotoLevel(Integer networkId, Integer deviceId, Integer sourceId, Integer level, Integer duration, Integer channel) {
+    logTrace("gotoLevel(networkId=0x%02X, deviceId=0x%02X, sourceId=0x%02X, level=%d, duration=%d, channel=%d)",
+            networkId, deviceId, sourceId, level, duration, channel)
+
+    // Validate inputs
+    if (networkId < 0 || networkId > 255) {
+        logError("Network ID ${networkId} is out of range (0-255)")
+        throw new IllegalArgumentException("Network ID must be 0-255")
+    }
     if (deviceId < 0 || deviceId > 255) {
         logError("Device ID ${deviceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Device ID must be between 0 and 255")
+        throw new IllegalArgumentException("Device ID must be 0-255")
+    }
+    if (sourceId < 0 || sourceId > 255) {
+        logError("Source ID ${sourceId} is out of range (0-255)")
+        throw new IllegalArgumentException("Source ID must be 0-255")
     }
     if (level < 0 || level > 100) {
         logError("Level ${level} is out of range (0-100)")
-        throw new IllegalArgumentException("Level must be between 0 and 100")
+        throw new IllegalArgumentException("Level must be 0-100")
     }
     if (duration < 0 || duration > 255) {
         logError("Duration ${duration} is out of range (0-255)")
-        throw new IllegalArgumentException("Duration must be between 0 and 255")
+        throw new IllegalArgumentException("Duration must be 0-255")
     }
     if (channel < 0 || channel > 255) {
         logError("Channel ${channel} is out of range (0-255)")
-        throw new IllegalArgumentException("Channel must be between 0 and 255")
-    }
-    if (networkId < 0 || networkId > 255) {
-        logError("Network ID ${networkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Network ID must be between 0 and 255")
+        throw new IllegalArgumentException("Channel must be 0-255")
     }
 
-    def packet = new ByteArrayOutputStream()
-    packet.write([0x0a, 0x04] as byte[]) // Control Word
-    packet.write(networkId) // Network ID
-    packet.write(deviceId) // Device ID
-    packet.write(0xFF) // Source ID (PIM)
-    packet.write(0x22) // MDID (Goto)
-    packet.write(level) // Level
-    packet.write(duration) // Rate
-    packet.write(channel) // Channel
-    return packet.toByteArray()
+    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, 9, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    try {
+        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_GOTO, [(byte) level, (byte) duration, (byte) channel] as byte[])
+        logDebug("Goto level succeeded")
+        return true
+    } catch (RuntimeException e) {
+        logError("Goto level failed: %s", e.message)
+        throw e
+    }
 }
 
-byte[] buildDeviceStateRequestCommand(Integer networkId, Integer deviceId) {
+def requestDeviceState(Integer networkId, Integer deviceId, Integer sourceId) {
+    logTrace("requestDeviceState(networkId=0x%02X, deviceId=0x%02X, sourceId=0x%02X)", networkId, deviceId, sourceId)
+
     // Validate inputs
-    if (deviceId < 0 || deviceId > 255) {
-        logError("Device ID ${deviceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Device ID must be between 0 and 255")
-    }
     if (networkId < 0 || networkId > 255) {
         logError("Network ID ${networkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Network ID must be between 0 and 255")
+        throw new IllegalArgumentException("Network ID must be 0-255")
+    }
+    if (deviceId < 0 || deviceId > 255) {
+        logError("Device ID ${deviceId} is out of range (0-255)")
+        throw new IllegalArgumentException("Device ID must be 0-255")
+    }
+    if (sourceId < 0 || sourceId > 255) {
+        logError("Source ID ${sourceId} is out of range (0-255)")
+        throw new IllegalArgumentException("Source ID must be 0-255")
     }
 
-    def packet = new ByteArrayOutputStream()
-    packet.write([0x07, 0x04] as byte[]) // Control Word
-    packet.write(networkId) // Network ID
-    packet.write(deviceId) // Device ID
-    packet.write(0x00) // Source ID (PIM)
-    packet.write(0x30) // MDID (Report State Command)
-
-    return packet.toByteArray()
+    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, 6, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    try {
+        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_REPORT_STATE, null)
+        logDebug("Device state request succeeded")
+        return true
+    } catch (RuntimeException e) {
+        logError("Device state request failed: %s", e.message)
+        throw e
+    }
 }
 
 /***************************************************************************
@@ -793,12 +824,6 @@ void addDevice(deviceInfo) {
             logInfo("Skipping ${deviceNetworkId} not enabled")
         }
     }
-}
-
-boolean sendPimMessage(byte[] bytes) {
-    logTrace("sendPimMessage()")
-    def pim = getPimDevice()
-    return pim.transmitMessage(bytes)
 }
 
 def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
