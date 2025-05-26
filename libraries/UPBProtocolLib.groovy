@@ -1,0 +1,256 @@
+/*
+* Hubitat Library: UPBProtocolLib
+* Description: Universal Powerline Bus Helper Library for Hubitat
+* Copyright: 2025 UPBeat Automation
+* Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+* Author: UPBeat Automation
+*/
+library(
+        name: "UPBProtocolLib",
+        namespace: "UPBeat",
+        author: "UPBeat Automation",
+        description: "Helper functions for UPB packet encoding and decoding",
+        category: "Utilities",
+        importUrl: ""
+)
+
+import hubitat.helper.HexUtils
+import groovy.transform.Field
+
+// Bit masks for control word fields
+@Field static final short CTRL_LNK_MASK = 0x8000    // Bit 15
+@Field static final short CTRL_REPRQ_MASK = 0x6000  // Bits 14-13
+@Field static final short CTRL_LEN_MASK = 0x1F00    // Bits 12-8
+@Field static final short CTRL_RSV_MASK = 0x0080    // Bit 7
+@Field static final short CTRL_ACKRQ_MASK = 0x0070  // Bits 6-4
+@Field static final short CTRL_CNT_MASK = 0x000C    // Bits 3-2
+@Field static final short CTRL_SEQ_MASK = 0x0003    // Bits 1-0
+
+// MSID Mapping
+@Field static final byte UPB_CORE_COMMAND = 0x00
+@Field static final byte UPB_DEVICE_CONTROL_COMMAND = 0x01
+@Field static final byte UPB_RESERVED_COMAND_SET_1 = 0x02
+@Field static final byte UPB_RESERVED_COMAND_SET_2 = 0x03
+@Field static final byte UPB_CORE_REPORTS = 0x04
+@Field static final byte UPB_RESERVED_REPORT_SET_1 = 0x05
+@Field static final byte UPB_RESERVED_REPORT_SET_2 = 0x06
+@Field static final byte UPB_EXTENDED_MESSAGE_SET = 0x07
+
+// Core Commands
+@Field static final byte UPB_NULL_COMMAND = 0x00
+@Field static final byte UPB_WRITE_ENABLED_COMMAND = 0x01
+@Field static final byte UPB_WRITE_PROTECT_COMMAND = 0x02
+@Field static final byte UPB_START_SETUP_MODE_COMMAND = 0x03
+@Field static final byte UPB_STOP_SETUP_MODE_COMMAND = 0x04
+@Field static final byte UPB_GET_SETUP_TIME_COMMAND = 0x05
+@Field static final byte UPB_AUTO_ADDRESS_COMMAND = 0x06
+@Field static final byte UPB_GET_DEVICE_STATUS_COMMAND = 0x07
+@Field static final byte UPB_SET_DEVICE_CONTROL_COMMAND = 0x08
+@Field static final byte UPB_ADD_LINK_COMMAND = 0x0B
+@Field static final byte UPB_DEL_LINK_COMMAND = 0x0C
+@Field static final byte UPB_TRANSMIT_MESSAGE_COMMAND = 0x0D
+@Field static final byte UPB_DEVICE_RESET_COMMAND = 0x0E
+@Field static final byte UPB_GET_DEVICE_SIG_COMMAND = 0x0F
+@Field static final byte UPB_GET_REGISTER_VALUE_COMMAND = 0x10
+@Field static final byte UPB_SET_REGISTER_VALUE_COMMAND = 0x11
+
+// Device Control Commands
+@Field static final byte UPB_ACTIVATE_LINK = 0x20
+@Field static final byte UPB_DEACTIVATE_LINK = 0x21
+@Field static final byte UPB_GOTO = 0x22
+@Field static final byte UPB_FADE_START = 0x23
+@Field static final byte UPB_FADE_STOP = 0x24
+@Field static final byte UPB_BLINK = 0x25
+@Field static final byte UPB_INDICATE = 0x26
+@Field static final byte UPB_TOGGLE = 0x27
+@Field static final byte UPB_REPORT_STATE = 0x30
+@Field static final byte UPB_STORE_STATE = 0x31
+
+// Core Report Set
+@Field static final byte UPB_ACK_RESPONSE = 0x80
+@Field static final byte UPB_SETUP_TIME = 0x85
+@Field static final byte UPB_DEVICE_STATE = 0x86
+@Field static final byte UPB_DEVICE_STATUS = 0x87
+@Field static final byte UPB_DEVICE_SIG = 0x8F
+@Field static final byte UPB_REGISTER_VALUES = 0x90
+@Field static final byte UPB_RAM_VALUES = 0x91
+@Field static final byte UPB_RAW_DATA = 0x92
+@Field static final byte UPB_HEARTBEAT = 0x93
+
+/**
+ * Parses a 16-bit UPB control word into its constituent fields.
+ * @param controlWord The 16-bit control word to parse.
+ * @return A map containing the parsed fields: lnk, reprq, len, rsv, ackMsg, ackId, ackPulse, cnt, seq.
+ */
+static Map parseControlWord(short controlWord) {
+    def lnk = (controlWord & CTRL_LNK_MASK) >> 15
+    def reprq = (controlWord & CTRL_REPRQ_MASK) >> 13
+    def len = (controlWord & CTRL_LEN_MASK) >> 8
+    def rsv = (controlWord & CTRL_RSV_MASK) >> 7
+    def ackMsg = (controlWord & 0x0040) >> 6
+    def ackId = (controlWord & 0x0020) >> 5
+    def ackPulse = (controlWord & 0x0010) >> 4
+    def cnt = (controlWord & CTRL_CNT_MASK) >> 2
+    def seq = controlWord & CTRL_SEQ_MASK
+
+    return [
+            lnk: lnk,
+            reprq: reprq,
+            len: len,
+            rsv: rsv,
+            ackMsg: ackMsg,
+            ackId: ackId,
+            ackPulse: ackPulse,
+            cnt: cnt,
+            seq: seq
+    ]
+}
+
+/**
+ * Encodes UPB control word fields into a 16-bit control word.
+ * @param lnk Link bit (0 = Direct, 1 = Link)
+ * @param reprq Repeater Request (0-3)
+ * @param len Packet length in bytes (6-24)
+ * @param ackMsg Acknowledge Message request (0 or 1)
+ * @param ackId ID Pulse request (0 or 1)
+ * @param ackPulse ACK Pulse request (0 or 1)
+ * @param cnt Transmission Count (0-3)
+ * @param seq Transmission Sequence (0-3)
+ * @return The encoded 16-bit control word as a short.
+ */
+static short encodeControlWord(int lnk, int reprq, int len, int ackMsg, int ackId, int ackPulse, int cnt, int seq) {
+    if (lnk < 0 || lnk > 1) throw new IllegalArgumentException("LNK must be 0 or 1, got $lnk")
+    if (reprq < 0 || reprq > 3) throw new IllegalArgumentException("REPRQ must be 0-3, got $reprq")
+    if (len < 6 || len > 24) throw new IllegalArgumentException("LEN must be 6-24, got $len")
+    if (ackMsg < 0 || ackMsg > 1) throw new IllegalArgumentException("ackMsg must be 0 or 1, got $ackMsg")
+    if (ackId < 0 || ackId > 1) throw new IllegalArgumentException("ackId must be 0 or 1, got $ackId")
+    if (ackPulse < 0 || ackPulse > 1) throw new IllegalArgumentException("ackPulse must be 0 or 1, got $ackPulse")
+    if (cnt < 0 || cnt > 3) throw new IllegalArgumentException("CNT must be 0-3, got $cnt")
+    if (seq < 0 || seq > 3) throw new IllegalArgumentException("SEQ must be 0-3, got $seq")
+
+    short controlWord = 0
+    controlWord |= (lnk << 15)
+    controlWord |= (reprq << 13)
+    controlWord |= (len << 8)
+    controlWord |= (ackMsg << 6)
+    controlWord |= (ackId << 5)
+    controlWord |= (ackPulse << 4)
+    controlWord |= (cnt << 2)
+    controlWord |= seq
+
+    return controlWord
+}
+
+/**
+ * Calculates the UPB packet checksum.
+ * @param data The packet bytes (excluding checksum for computation).
+ * @return The 8-bit checksum byte.
+ */
+static byte checksum(byte[] data) {
+    int sum = 0
+    data.each { b -> sum += (b & 0xFF) } // Unsigned summation
+    return (~sum + 1) & 0xFF // Two's complement, truncated to 8 bits
+}
+
+/**
+ * Parses a UPB packet and extracts header and message fields.
+ * @param data The raw packet bytes.
+ * @return A map with parsed fields.
+ * @throws IllegalArgumentException if the packet is invalid (length < 6 or checksum ≠ 0).
+ */
+static Map parsePacket(byte[] data) {
+    if (data.size() < 6) {
+        throw new IllegalArgumentException("Invalid UPB packet: length ${data.size()} < 6 bytes")
+    }
+
+    byte sum = 0
+    data.each { b -> sum += (b & 0xFF) } // Unsigned summation
+    if (sum != 0) {
+        throw new IllegalArgumentException("Invalid UPB packet: checksum 0x${String.format('%02X', sum)}")
+    }
+
+    short controlWord = (short) (((data[0] & 0xFF) << 8) | (data[1] & 0xFF))
+    byte networkId = data[2]
+    byte destinationId = data[3]
+    byte sourceId = data[4]
+    byte messageDataId = data[5]
+    byte messageSetId = (messageDataId >> 5) & 0x07
+    byte messageId = messageDataId & 0x1F
+    byte[] messageArgs = data.size() > 6 ? data[6..-2] : new byte[0]
+
+    return [
+            controlWord: controlWord,
+            networkId: networkId,
+            destinationId: destinationId,
+            sourceId: sourceId,
+            messageDataId: messageDataId,
+            messageSetId: messageSetId,
+            messageId: messageId,
+            messageArgs: messageArgs
+    ]
+}
+
+/**
+ * Gets the name of a Message Set ID (MSID).
+ * @param msid The MSID value.
+ * @return The human-readable name.
+ */
+static String getMsidName(int msid) {
+    switch (msid) {
+        case UPB_CORE_COMMAND: return "UPB_CORE_COMMAND"
+        case UPB_DEVICE_CONTROL_COMMAND: return "UPB_DEVICE_CONTROL_COMMAND"
+        case UPB_RESERVED_COMAND_SET_1: return "UPB_RESERVED_COMAND_SET_1"
+        case UPB_RESERVED_COMAND_SET_2: return "UPB_RESERVED_COMAND_SET_2"
+        case UPB_CORE_REPORTS: return "UPB_CORE_REPORTS"
+        case UPB_RESERVED_REPORT_SET_1: return "UPB_RESERVED_REPORT_SET_1"
+        case UPB_RESERVED_REPORT_SET_2: return "UPB_RESERVED_REPORT_SET_2"
+        case UPB_EXTENDED_MESSAGE_SET: return "UPB_EXTENDED_MESSAGE_SET"
+        default: return "UNKNOWN_MSID"
+    }
+}
+
+/**
+ * Gets the name of a Message Data ID (MDID).
+ * @param mdid The MDID value.
+ * @return The human-readable name.
+ */
+static String getMdidName(int mdid) {
+    switch (mdid) {
+        case UPB_NULL_COMMAND: return "UPB_NULL_COMMAND"
+        case UPB_WRITE_ENABLED_COMMAND: return "UPB_WRITE_ENABLED_COMMAND"
+        case UPB_WRITE_PROTECT_COMMAND: return "UPB_WRITE_PROTECT_COMMAND"
+        case UPB_START_SETUP_MODE_COMMAND: return "UPB_START_SETUP_MODE_COMMAND"
+        case UPB_STOP_SETUP_MODE_COMMAND: return "UPB_STOP_SETUP_MODE_COMMAND"
+        case UPB_GET_SETUP_TIME_COMMAND: return "UPB_GET_SETUP_TIME_COMMAND"
+        case UPB_AUTO_ADDRESS_COMMAND: return "UPB_AUTO_ADDRESS_COMMAND"
+        case UPB_GET_DEVICE_STATUS_COMMAND: return "UPB_GET_DEVICE_STATUS_COMMAND"
+        case UPB_SET_DEVICE_CONTROL_COMMAND: return "UPB_SET_DEVICE_CONTROL_COMMAND"
+        case UPB_ADD_LINK_COMMAND: return "UPB_ADD_LINK_COMMAND"
+        case UPB_DEL_LINK_COMMAND: return "UPB_DEL_LINK_COMMAND"
+        case UPB_TRANSMIT_MESSAGE_COMMAND: return "UPB_TRANSMIT_MESSAGE_COMMAND"
+        case UPB_DEVICE_RESET_COMMAND: return "UPB_DEVICE_RESET_COMMAND"
+        case UPB_GET_DEVICE_SIG_COMMAND: return "UPB_GET_DEVICE_SIG_COMMAND"
+        case UPB_GET_REGISTER_VALUE_COMMAND: return "UPB_GET_REGISTER_VALUE_COMMAND"
+        case UPB_SET_REGISTER_VALUE_COMMAND: return "UPB_SET_REGISTER_VALUE_COMMAND"
+        case UPB_ACTIVATE_LINK: return "UPB_ACTIVATE_LINK"
+        case UPB_DEACTIVATE_LINK: return "UPB_DEACTIVATE_LINK"
+        case UPB_GOTO: return "UPB_GOTO"
+        case UPB_FADE_START: return "UPB_FADE_START"
+        case UPB_FADE_STOP: return "UPB_FADE_STOP"
+        case UPB_BLINK: return "UPB_BLINK"
+        case UPB_INDICATE: return "UPB_INDICATE"
+        case UPB_TOGGLE: return "UPB_TOGGLE"
+        case UPB_REPORT_STATE: return "UPB_REPORT_STATE"
+        case UPB_STORE_STATE: return "UPB_STORE_STATE"
+        case UPB_ACK_RESPONSE: return "UPB_ACK_RESPONSE"
+        case UPB_SETUP_TIME: return "UPB_SETUP_TIME"
+        case UPB_DEVICE_STATE: return "UPB_DEVICE_STATE"
+        case UPB_DEVICE_STATUS: return "UPB_DEVICE_STATUS"
+        case UPB_DEVICE_SIG: return "UPB_DEVICE_SIG"
+        case UPB_REGISTER_VALUES: return "UPB_REGISTER_VALUES"
+        case UPB_RAM_VALUES: return "UPB_RAM_VALUES"
+        case UPB_RAW_DATA: return "UPB_RAW_DATA"
+        case UPB_HEARTBEAT: return "UPB_HEARTBEAT"
+        default: return "UNKNOWN_MDID"
+    }
+}
