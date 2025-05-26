@@ -182,45 +182,32 @@ def refresh() {
     logTrace("refresh()")
     try {
         isCorrectParent()
-        byte[] data = getParent().buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
-        logDebug("UPB Device State Request Command [${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Device State Request successfully sent [${data}]")
-            sendEvent(name: "status", value: "ok", isStateChange: false)
-        } else {
-            def error = "Failed to issue Device State Request command [${data}]"
-            logDebug error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
         }
-    } catch (IllegalStateException e) {
-        log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-    } catch (Exception e) {
-        logWarn("Call to refresh failed: ${e.message}")
-        sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
-    }
-}
+        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Device ID must be 0-255")
+        }
 
-def flash(BigDecimal rateToFlash) {
-    logTrace("flash(${rateToFlash})")
-    try {
-        isCorrectParent()
-        logDebug("Flash Rate [${rateToFlash}]")
-        byte[] data = getParent().blinkCommand(settings.networkId.intValue(), settings.deviceId.intValue(), rateToFlash, settings.channelId.intValue())
-        logDebug("UPB Flash Command[${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("UPB Flash [${data}]")
-            sendEvent(name: "switch", value: "on", isStateChange: true)
-            sendEvent(name: "level", value: 100, isStateChange: true)
-            sendEvent(name: "status", value: "ok", isStateChange: false)
-        } else {
-            def error = "Failed to issue flash command [${data}]"
-            logDebug error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
-        }
+        getParent().requestDeviceState(settings.networkId.intValue(), settings.deviceId.intValue(), 0x00)
+        logDebug("Device state request succeeded")
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("Device state request failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (Exception e) {
+        logWarn("Refresh failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
 
@@ -228,26 +215,40 @@ def on() {
     logTrace("on()")
     try {
         isCorrectParent()
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
+        }
+        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Device ID must be 0-255")
+        }
+        if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
+            logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Channel ID must be 0-255")
+        }
+
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
         logDebug("Sending ON to device [${settings.deviceId}] at rate [${rate}]")
-        byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 100, rate, settings.channelId.intValue())
-        logDebug("UPB Command Goto [${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Command successfully sent [${data}]")
-            sendEvent(name: "switch", value: "on", isStateChange: true)
-            sendEvent(name: "level", value: 100, unit: "%", isStateChange: true)
-            sendEvent(name: "status", value: "ok", isStateChange: false)
-        } else {
-            def error = "Failed to issue on command [${data}]"
-            logDebug error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
-        }
+        getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0xFF, 100, rate, settings.channelId.intValue())
+        logDebug("On command succeeded")
+        sendEvent(name: "switch", value: "on", isStateChange: true)
+        sendEvent(name: "level", value: 100, unit: "%", isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("On command failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     } catch (Exception e) {
-        logWarn("Call to on failed: ${e.message}")
+        logWarn("On command failed: %s", e.message)
         sendEvent(name: "status", value: "error", descriptionText: "On command failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
 
@@ -255,33 +256,61 @@ def off() {
     logTrace("off()")
     try {
         isCorrectParent()
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
+        }
+        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Device ID must be 0-255")
+        }
+        if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
+            logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Channel ID must be 0-255")
+        }
+
         def rate = settings.fadeRate ? FADE_RATE_MAPPING[settings.fadeRate] : 255
         logDebug("Sending OFF to device [${settings.deviceId}] at rate [${rate}]")
-        byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), 0, rate, settings.channelId.intValue())
-        logDebug("UPB Command Goto [${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Command successfully sent [${data}]")
-            sendEvent(name: "switch", value: "off", isStateChange: true)
-            sendEvent(name: "level", value: 0, unit: "%", isStateChange: true)
-            sendEvent(name: "status", value: "ok", isStateChange: false)
-        } else {
-            def error = "Failed to issue off command [${data}]"
-            logDebug error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
-        }
+        getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0xFF, 0, rate, settings.channelId.intValue())
+        logDebug("Off command succeeded")
+        sendEvent(name: "switch", value: "off", isStateChange: true)
+        sendEvent(name: "level", value: 0, unit: "%", isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("Off command failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     } catch (Exception e) {
-        logWarn("Call to off failed: ${e.message}")
+        logWarn("Off command failed: %s", e.message)
         sendEvent(name: "status", value: "error", descriptionText: "Off command failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
 
 def setLevel(value, duration = null) {
-    logTrace("setLevel(${value}, ${duration})")
+    logTrace("setLevel(value=%s, duration=%s)", value, duration)
     try {
         isCorrectParent()
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
+        }
+        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Device ID must be 0-255")
+        }
+        if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
+            logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Channel ID must be 0-255")
+        }
+
         // Validate and clamp level
         def level = value.toInteger()
         level = Math.max(0, Math.min(level, 100))
@@ -298,25 +327,24 @@ def setLevel(value, duration = null) {
         }
 
         logDebug("Sending Set-Percent to device [${settings.deviceId}] with level=${level}, rate=${rate} (duration=${duration ?: 'not specified'})")
-        byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), level, rate, settings.channelId.intValue())
-        logDebug("UPB Command Goto level [${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Command successfully sent [${data}]")
-            // Update switch and level attributes
-            sendEvent(name: "switch", value: level > 0 ? "on" : "off", isStateChange: true)
-            sendEvent(name: "level", value: level, unit: "%", isStateChange: true)
-            sendEvent(name: "status", value: "ok", isStateChange: false)
-        } else {
-            def error = "Failed to issue setLevel command [${data}]"
-            logDebug error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
-        }
+        getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0xFF, level, rate, settings.channelId.intValue())
+        logDebug("Set level command succeeded")
+        sendEvent(name: "switch", value: level > 0 ? "on" : "off", isStateChange: true)
+        sendEvent(name: "level", value: level, unit: "%", isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("Set level command failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     } catch (Exception e) {
-        logWarn("Call to setLevel failed: ${e.message}")
+        logWarn("Set level command failed: %s", e.message)
         sendEvent(name: "status", value: "error", descriptionText: "SetLevel command failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
 
