@@ -527,12 +527,20 @@ def writePimRegister(byte register, byte[] values) {
     }
 }
 
-def transmitMessage(byte[] upbMessage) {
-    logTrace("transmitMessage(upbMessage=%s)", upbMessage)
+def transmitMessage(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgument) {
+    logTrace("transmitMessage(controlWord=0x%04X, networkId=0x%02X, destinationId=0x%02X, sourceId=0x%02X, messageDataId=0x%02X, messageArgument=%s)",
+            controlWord, networkId, destinationId, sourceId, messageDataId, messageArgument ? HexUtils.byteArrayToHexString(messageArgument) : "null")
+
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
 
-    byte[] encodedPacket = encodePimPacket(upbMessage)
+    byte[] packet = buildPacket(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgument)
+
+    // Encode packet as ASCII hex
+    def packetStream = new ByteArrayOutputStream()
+    packetStream.write(packet)
+    byte[] encodedPacket = HexUtils.byteArrayToHexString(packetStream.toByteArray()).getBytes()
+    logDebug("Encoded PIM transmit packet: %s", new String(encodedPacket))
 
     def message = new ByteArrayOutputStream()
     message.write(TRANSMIT_MESSAGE)
@@ -544,7 +552,6 @@ def transmitMessage(byte[] upbMessage) {
         def retry = 0
         def maxIterations = maxRetry + 10
         def iteration = 0
-        def finalResult = 'Failed'
 
         while (iteration++ < maxIterations) {
             def responseEntry = deviceResponses.get(device.deviceNetworkId)
@@ -561,17 +568,20 @@ def transmitMessage(byte[] upbMessage) {
                     responseEntry.semaphore.drainPermits()
                     if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
                         response = responseEntry.response
-                        if (response in ['PK', 'PN']) {
-                            finalResult = response == 'PK' ? 'Success' : 'NoAck'
-                            logDebug("Transmission completed with %s (%s)", response == 'PK' ? 'ACK' : 'NAK', response)
-                            break
+                        if (response == 'PK') {
+                            logDebug("Transmission completed with ACK (PK)")
+                            return true
+                        } else if (response == 'PN') {
+                            logDebug("Transmission completed with NAK (PN)")
+                            return true
                         }
                     } else {
                         logError("Timeout waiting for PK/PN response")
+                        throw new RuntimeException("Failed: Timeout waiting for ACK/NAK response")
                     }
                 } else if (response == 'PE') {
                     logError("PIM rejected UPB message (PE)")
-                    break
+                    throw new RuntimeException("Failed: PIM rejected message (PE)")
                 } else if (response == 'PB' && retry++ < maxRetry) {
                     logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
                     pauseExecution(100)
@@ -579,15 +589,16 @@ def transmitMessage(byte[] upbMessage) {
                 }
             } else {
                 logWarn("Timeout waiting for initial PA response, retrying")
-                if (retry++ >= maxRetry) break
+                if (retry++ >= maxRetry) {
+                    logError("UPB message transmission aborted: Maximum iterations reached")
+                    throw new RuntimeException("Failed: Transmission aborted: Maximum iterations reached")
+                }
                 pauseExecution(100)
             }
         }
 
-        if (iteration >= maxIterations) {
-            logError("UPB message transmission aborted: Maximum iterations reached")
-        }
-        return finalResult
+        logError("UPB message transmission aborted: Maximum iterations reached")
+        throw new RuntimeException("Failed: Transmission aborted: Maximum iterations reached")
     }
 }
 
