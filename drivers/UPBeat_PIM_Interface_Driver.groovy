@@ -64,16 +64,6 @@ private void setDeviceStatus(String state, String reason = '', boolean forceEven
     sendEvent(name: "status", value: state, descriptionText: msg, isStateChange: forceEvent)
 }
 
-private byte[] encodePimPacket(byte[] data) {
-    def packet = new ByteArrayOutputStream()
-    packet.write(data)
-    byte sum = checksum(packet.toByteArray())
-    packet.write(sum)
-    String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
-    logDebug("Encoded PIM packet: %s", packetTextHex)
-    return packetTextHex.getBytes()
-}
-
 /***************************************************************************
  * Core Driver Functions
  ***************************************************************************/
@@ -398,8 +388,13 @@ def readPimRegister(byte register, int numRegisters) {
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
 
-    byte[] packetData = [register, numRegisters] as byte[]
-    byte[] encodedPacket = encodePimPacket(packetData)
+    // Build packet: [register, numRegisters]
+    def packet = new ByteArrayOutputStream()
+    packet.write([register, numRegisters] as byte[])
+    byte sum = checksum(packet.toByteArray())
+    packet.write(sum)
+    byte[] encodedPacket = HexUtils.byteArrayToHexString(packet.toByteArray()).getBytes()
+    logDebug("Encoded PIM read packet: %s", new String(encodedPacket))
 
     def message = new ByteArrayOutputStream()
     message.write(READ_REGISTER)
@@ -475,10 +470,14 @@ def writePimRegister(byte register, byte[] values) {
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
 
-    def packetData = new ByteArrayOutputStream()
-    packetData.write(register)
-    packetData.write(values)
-    byte[] encodedPacket = encodePimPacket(packetData.toByteArray())
+    // Build packet: [register, values...]
+    def packet = new ByteArrayOutputStream()
+    packet.write(register)
+    packet.write(values)
+    byte sum = checksum(packet.toByteArray())
+    packet.write(sum)
+    byte[] encodedPacket = HexUtils.byteArrayToHexString(packet.toByteArray()).getBytes()
+    logDebug("Encoded PIM write packet: %s", new String(encodedPacket))
 
     def message = new ByteArrayOutputStream()
     message.write(WRITE_REGISTER)
