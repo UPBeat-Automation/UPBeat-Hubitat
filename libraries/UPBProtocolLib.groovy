@@ -1,10 +1,10 @@
 /*
-* Hubitat Library: UPBProtocolLib
-* Description: Universal Powerline Bus Helper Library for Hubitat
-* Copyright: 2025 UPBeat Automation
-* Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
-* Author: UPBeat Automation
-*/
+ * Hubitat Library: UPBProtocolLib
+ * Description: Universal Powerline Bus Helper Library for Hubitat
+ * Copyright: 2025 UPBeat Automation
+ * Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+ * Author: UPBeat Automation
+ */
 library(
         name: "UPBProtocolLib",
         namespace: "UPBeat",
@@ -25,6 +25,31 @@ import groovy.transform.Field
 @Field static final short CTRL_ACKRQ_MASK = 0x0070  // Bits 6-4
 @Field static final short CTRL_CNT_MASK = 0x000C    // Bits 3-2
 @Field static final short CTRL_SEQ_MASK = 0x0003    // Bits 1-0
+
+// Control word field values
+@Field static final byte LNK_DIRECT = 0            // Direct packet (bit 15 = 0)
+@Field static final byte LNK_LINK = 1              // Link packet (bit 15 = 1)
+@Field static final byte REPRQ_NONE = 0            // No repeater (bits 14-13 = 00)
+@Field static final byte REPRQ_ONE = 1             // One repeater (bits 14-13 = 01)
+@Field static final byte REPRQ_TWO = 2             // Two repeaters (bits 14-13 = 10)
+@Field static final byte REPRQ_RESERVED = 3        // Reserved (bits 14-13 = 11)
+@Field static final byte ACKRQ_NONE = 0            // No ACK (bits 6-4 = 000)
+@Field static final byte ACKRQ_MSG = 1             // Message ACK (bit 6 = 1, 010)
+@Field static final byte ACKRQ_ID = 2              // ID pulse ACK (bit 5 = 1, 001)
+@Field static final byte ACKRQ_PULSE = 4           // Pulse ACK (bit 4 = 1, 100)
+@Field static final byte ACKRQ_MSG_ID = 3          // Message + ID ACK (bits 6-5 = 11)
+@Field static final byte ACKRQ_MSG_PULSE = 5       // Message + Pulse ACK (bits 6,4 = 11)
+@Field static final byte ACKRQ_ID_PULSE = 6        // ID + Pulse ACK (bits 5-4 = 11)
+@Field static final byte ACKRQ_ALL = 7             // All ACKs (bits 6-4 = 111)
+@Field static final byte RSV_ZERO = 0              // Reserved bit (bit 7 = 0)
+@Field static final byte CNT_ZERO = 0              // Transmission count 0 (bits 3-2 = 00)
+@Field static final byte CNT_ONE = 1               // Transmission count 1 (bits 3-2 = 01)
+@Field static final byte CNT_TWO = 2               // Transmission count 2 (bits 3-2 = 10)
+@Field static final byte CNT_THREE = 3             // Transmission count 3 (bits 3-2 = 11)
+@Field static final byte SEQ_ZERO = 0              // Sequence 0 (bits 1-0 = 00)
+@Field static final byte SEQ_ONE = 1               // Sequence 1 (bits 1-0 = 01)
+@Field static final byte SEQ_TWO = 2               // Sequence 2 (bits 1-0 = 10)
+@Field static final byte SEQ_THREE = 3             // Sequence 3 (bits 1-0 = 11)
 
 // MSID Mapping
 @Field static final byte UPB_CORE_COMMAND = 0x00
@@ -150,6 +175,47 @@ static byte checksum(byte[] data) {
     int sum = 0
     data.each { b -> sum += (b & 0xFF) } // Unsigned summation
     return (~sum + 1) & 0xFF // Two's complement, truncated to 8 bits
+}
+
+/**
+ * Builds a UPB packet from the provided components.
+ * @param controlWord 16-bit control word from encodeControlWord (LEN ignored).
+ * @param networkId Network ID (0-255).
+ * @param destinationId Destination device ID (0-255).
+ * @param sourceId Source device ID (0-255).
+ * @param messageDataId Message Data ID (MDID, 0-255).
+ * @param messageArgument Optional message arguments (null or 0+ bytes).
+ * @return The complete UPB packet as a byte array.
+ * @throws IllegalArgumentException if packet length exceeds maximum 24 bytes.
+ */
+static byte[] buildPacket(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgument) {
+    // Handle null messageArgument
+    byte[] args = messageArgument ?: new byte[0]
+
+    // Calculate packet length
+    int expectedLength = 6 + args.length + 1 // 6 header bytes + args + 1 checksum
+    if (expectedLength > 24) {
+        throw new IllegalArgumentException("Total packet length $expectedLength exceeds maximum 24 bytes")
+    }
+
+    // Update LEN field in control word (bits 12-8)
+    short updatedControlWord = (controlWord & ~CTRL_LEN_MASK) | ((expectedLength & 0x1F) << 8)
+
+    // Build packet
+    def packet = new ByteArrayOutputStream()
+    packet.write((updatedControlWord >> 8) & 0xFF) // High byte
+    packet.write(updatedControlWord & 0xFF)       // Low byte
+    packet.write(networkId)
+    packet.write(destinationId)
+    packet.write(sourceId)
+    packet.write(messageDataId)
+    if (args.length > 0) {
+        packet.write(args)
+    }
+    byte checksum = checksum(packet.toByteArray())
+    packet.write(checksum)
+
+    return packet.toByteArray()
 }
 
 /**
