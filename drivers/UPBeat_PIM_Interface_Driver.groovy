@@ -1,10 +1,10 @@
 /*
-* Hubitat Driver: UPB Powerline Interface Module
-* Description: Network driver for Universal Powerline Bus communication
-* Copyright: 2025 UPBeat Automation
-* Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
-* Author: UPBeat Automation
-*/
+ * Hubitat Driver: UPB Powerline Interface Module
+ * Description: Network driver for Universal Powerline Bus communication
+ * Copyright: 2025 UPBeat Automation
+ * Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+ * Author: UPBeat Automation
+ */
 import hubitat.helper.HexUtils
 import groovy.transform.Field
 import java.util.concurrent.ConcurrentHashMap
@@ -12,6 +12,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 #include UPBeat.UPBeatLogger
 #include UPBeat.UPBeatDriverLib
+#include UPBeat.UPBProtocolLib
 
 metadata {
     definition(name: "UPB Powerline Interface Module", namespace: "UPBeat", author: "UPBeat Automation") {
@@ -37,63 +38,10 @@ metadata {
 @Field static ConcurrentHashMap deviceMutexes = new ConcurrentHashMap()
 @Field static ConcurrentHashMap deviceResponses = new ConcurrentHashMap()
 
-// MSID Mapping
-@Field static final byte UPB_CORE_COMMAND = 0x00
-@Field static final byte UPB_DEVICE_CONTROL_COMMAND = 0x01
-@Field static final byte UPB_RESERVED_COMAND_SET_1 = 0x02
-@Field static final byte UPB_RESERVED_COMAND_SET_2 = 0x03
-@Field static final byte UPB_CORE_REPORTS = 0x04
-@Field static final byte UPB_RESERVED_REPORT_SET_1 = 0x05
-@Field static final byte UPB_RESERVED_REPORT_SET_2 = 0x06
-@Field static final byte UPB_EXTENDED_MESSAGE_SET = 0x07
-
-// Core Commands
-@Field static final byte UPB_NULL_COMMAND = 0x00
-@Field static final byte UPB_WRITE_ENABLED_COMMAND = 0x01
-@Field static final byte UPB_WRITE_PROTECT_COMMAND = 0x02
-@Field static final byte UPB_START_SETUP_MODE_COMMAND = 0x03
-@Field static final byte UPB_STOP_SETUP_MODE_COMMAND = 0x04
-@Field static final byte UPB_GET_SETUP_TIME_COMMAND = 0x05
-@Field static final byte UPB_AUTO_ADDRESS_COMMAND = 0x06
-@Field static final byte UPB_GET_DEVICE_STATUS_COMMAND = 0x07
-@Field static final byte UPB_SET_DEVICE_CONTROL_COMMAND = 0x08
-// 0x09 – 0x0A Unused Reserved for future command use.
-@Field static final byte UPB_ADD_LINK_COMMAND = 0x0B
-@Field static final byte UPB_DEL_LINK_COMMAND = 0x0C
-@Field static final byte UPB_TRANSMIT_MESSAGE_COMMAND = 0x0D
-@Field static final byte UPB_DEVICE_RESET_COMMAND = 0x0E
-@Field static final byte UPB_GET_DEVICE_SIG_COMMAND = 0x0F
-@Field static final byte UPB_GET_REGISTER_VALUE_COMMAND = 0x10
-@Field static final byte UPB_SET_REGISTER_VALUE_COMMAND = 0x11
-// 0x12 – 0x1F Unused Reserved for future command use.
-
-// Device Control Commands
-@Field static final byte UPB_ACTIVATE_LINK = 0x20
-@Field static final byte UPB_DEACTIVATE_LINK = 0x21
-@Field static final byte UPB_GOTO = 0x22
-@Field static final byte UPB_FADE_START = 0x23
-@Field static final byte UPB_FADE_STOP = 0x24
-@Field static final byte UPB_BLINK = 0x25
-@Field static final byte UPB_INDICATE = 0x26
-@Field static final byte UPB_TOGGLE = 0x27
-//0x28 – 0x2F // Reserved for future use
-@Field static final byte UPB_REPORT_STATE = 0x30
-@Field static final byte UPB_STORE_STATE = 0x31
-//0x32 – 0x3F // Reserved for future use
-
-// Core Report Set
-@Field static final byte UPB_ACK_RESPONSE = 0x80
-//0x81 – 0x84 //Unused
-@Field static final byte UPB_SETUP_TIME = 0x85
-@Field static final byte UPB_DEVICE_STATE = 0x86
-@Field static final byte UPB_DEVICE_STATUS = 0x87
-//0x88 – 0x8E // Unused
-@Field static final byte UPB_DEVICE_SIG = 0x8F
-@Field static final byte UPB_REGISTER_VALUES = 0x90
-@Field static final byte UPB_RAM_VALUES = 0x91
-@Field static final byte UPB_RAW_DATA = 0x92
-@Field static final byte UPB_HEARTBEAT = 0x93
-//0x94 – 0x9F // Unused
+@Field static final byte WRITE_REGISTER = 0x17
+@Field static final byte READ_REGISTER = 0x12
+@Field static final byte TRANSMIT_MESSAGE = 0x14
+@Field static final byte EOM = 0x0D
 
 /***************************************************************************
  * Helper Functions
@@ -111,9 +59,19 @@ private void setModuleStatus(String state, String reason = '') {
 }
 
 private void setDeviceStatus(String state, String reason = '', boolean forceEvent = false) {
-    logTrace("setModuleStatus(state=%s,reason=%s,forceEvent=%s)", state, reason, forceEvent)
+    logTrace("setDeviceStatus(state=%s,reason=%s,forceEvent=%s)", state, reason, forceEvent)
     String msg = reason ?: "${device} is ${state.toLowerCase()}"
     sendEvent(name: "status", value: state, descriptionText: msg, isStateChange: forceEvent)
+}
+
+private byte[] encodePimPacket(byte[] data) {
+    def packet = new ByteArrayOutputStream()
+    packet.write(data)
+    byte sum = checksum(packet.toByteArray())
+    packet.write(sum)
+    String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
+    logDebug("Encoded PIM packet: %s", packetTextHex)
+    return packetTextHex.getBytes()
 }
 
 /***************************************************************************
@@ -200,9 +158,8 @@ def socketStatus(message) {
     try {
         isCorrectParent()
         if (message.contains('error: Stream closed') || message.contains('error: Connection timed out') || message.contains("receive error: Connection reset")) {
-            msg = sprintf("Socket Status: %s", message)
-            logError(msg)
-            setDeviceStatus("error", msg, true)
+            logError("Socket Status: %s", message)
+            setDeviceStatus("error", message, true)
             logInfo("Attempting reconnect in %s seconds", reconnectInterval)
             runIn(reconnectInterval, reconnectSocket)
         }
@@ -214,18 +171,17 @@ def socketStatus(message) {
 }
 
 def parse(hexMessage) {
-    logTrace("parse(%s)" , hexMessage)
-    // When driver is updated, the deviceMutexes and deviceResponses get destroyed, so we ensure they exist.
+    logTrace("parse(%s)", hexMessage)
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
-    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', semaphore: new Semaphore(0)])
+    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
+
     try {
         isCorrectParent()
         logDebug("Message Received: [${hexMessage}]")
 
         byte[] messageBytes = HexUtils.hexStringToByteArray(hexMessage)
 
-        // Strip EOL character, should be present always
-        if (messageBytes.size() > 0 && messageBytes[messageBytes.length - 1] == 0x0D) {
+        if (messageBytes.size() > 0 && messageBytes[messageBytes.length - 1] == EOM) {
             messageBytes = messageBytes[0..-2]
             logTrace("[%s]: %s (EOL Removed)", hexMessage, HexUtils.byteArrayToHexString(messageBytes))
         } else {
@@ -240,66 +196,74 @@ def parse(hexMessage) {
             return
         }
 
-        // Show converted and parsed type
         def asciiMessage = new String(messageBytes)
         logTrace("[%s]: [%s] (Bytes to String)", HexUtils.byteArrayToHexString(messageBytes), asciiMessage)
 
-        // Parse message type from original bytes
         byte[] messageTypeBytes = messageBytes[0..1]
         String messageType = new String(messageTypeBytes)
-
         logTrace("[%s]: Type=[%s]", asciiMessage, messageType)
 
         byte[] messageData = new byte[0]
-
         if (messageBytes.size() > 2) {
             messageData = messageBytes[2..-1]
-            String messageDataString = new String(messageData)
-            messageData = HexUtils.hexStringToByteArray(messageDataString)
-            logTrace("[%s]: Data=%s", asciiMessage, messageData)
+            if (messageType == 'PU') {
+                String messageDataString = new String(messageData)
+                try {
+                    messageData = HexUtils.hexStringToByteArray(messageDataString)
+                    logTrace("[%s]: PU Data=%s", asciiMessage, HexUtils.byteArrayToHexString(messageData))
+                } catch (Exception e) {
+                    logError("[%s]: Failed to parse PU data: ${e.message}")
+                    setDeviceStatus("error", "PU data parsing failed: ${e.message}", true)
+                    return
+                }
+            } else {
+                logTrace("[%s]: Data=%s", asciiMessage, HexUtils.byteArrayToHexString(messageData))
+            }
         }
 
         def responseEntry = deviceResponses.get(device.deviceNetworkId)
-        switch (messageType) {
-            case "PA":
-                synchronized (responseEntry) {
+        synchronized (responseEntry) {
+            switch (messageType) {
+                case 'PA':
                     responseEntry.response = 'PA'
-                    logDebug("pim_accept_message")
+                    logDebug("PIM accept message (PA)")
                     responseEntry.semaphore.release()
-                }
-                break
-            case "PE":
-                synchronized (responseEntry) {
+                    break
+                case 'PE':
                     responseEntry.response = 'PE'
-                    logError("pim_error_message")
+                    logError("PIM error message (PE)")
                     responseEntry.semaphore.release()
-                }
-                break
-            case "PB":
-                synchronized (responseEntry) {
+                    break
+                case 'PB':
                     responseEntry.response = 'PB'
-                    logWarn("pim_busy_message")
+                    logWarn("PIM busy message (PB)")
                     responseEntry.semaphore.release()
-                }
-                break
-            case "PK":
-                logDebug("upb_ack_message")
-                break
-            case "PN":
-                logDebug("upb_nak_message")
-                break
-            case "PR":
-                logDebug("pim_register_report_message")
-                break
-            case "PU":
-                logDebug("upb_report_message")
-                // Dispatch to external thread, to prevent blocking
-                runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
-                break
-            default:
-                logError("Unknown message type: ${messageType}")
-                setDeviceStatus("error", "Message parsing failed: Unknown message type: ${messageType}", true)
-                return
+                    break
+                case 'PK':
+                    responseEntry.response = 'PK'
+                    logDebug("PIM ACK response (PK)")
+                    responseEntry.semaphore.release()
+                    break
+                case 'PN':
+                    responseEntry.response = 'PN'
+                    logDebug("PIM NAK response (PN)")
+                    responseEntry.semaphore.release()
+                    break
+                case 'PR':
+                    responseEntry.response = 'PR'
+                    responseEntry.data = messageData
+                    logDebug("PIM register report message")
+                    responseEntry.semaphore.release()
+                    break
+                case 'PU':
+                    logDebug("UPB report message")
+                    runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
+                    break
+                default:
+                    logError("Unknown message type: ${messageType}")
+                    setDeviceStatus("error", "Message parsing failed: Unknown message type: ${messageType}", true)
+                    return
+            }
         }
         setModuleStatus("Active")
         setDeviceStatus("ok")
@@ -376,15 +340,9 @@ def reconnectSocket() {
 }
 
 private def sendBytes(byte[] bytes) {
-    logTrace("sendBytes()")
+    logTrace("sendBytes(%s)", bytes)
     def hexString = HexUtils.byteArrayToHexString(bytes)
     interfaces.rawSocket.sendMessage(hexString)
-}
-
-private def checksum(byte[] data) {
-    logTrace("checksum()")
-    def sum = data.sum()
-    return (~sum + 1) & 0xFF
 }
 
 def setIPAddress(String ipAddress) {
@@ -415,112 +373,222 @@ def setPortNumber(int portNumber) {
     }
 }
 
-byte[] getCommandModeMessage() {
-    logTrace("getCommandModeMessage()")
-    def packet = new ByteArrayOutputStream()
-    packet.write([0x70, 0x02] as byte[]) // Control Word
-    byte sum = checksum(packet.toByteArray()) // Returns a byte checksum
-    logDebug("Checksum: %d", sum)
-    packet.write(sum)
-
-    String packetTextHex = HexUtils.byteArrayToHexString(packet.toByteArray())
-
-    logDebug("PIM Packet: %s", packetTextHex)
-
-    def encodedPacket = packetTextHex.getBytes()
-
-    message = new ByteArrayOutputStream()
-    message.write(0x17 as byte) // Write Register
-    message.write(encodedPacket) // UPB Message + Checksum
-    message.write(0x0D as byte) // EOL
-
-    byte[] messageBytes = message.toByteArray()
-
-    logDebug("PIM Message Encoded: %s", messageBytes)
-
-    return messageBytes
-}
-
 def setPIMCommandMode() {
     logTrace("setPIMCommandMode()")
-    if (transmitMessage(getCommandModeMessage())) {
-        logInfo("PIM was successfully set to command mode.")
+    if (writePimRegister((byte) 0x70, [0x02] as byte[])) {
+        logInfo("PIM was successfully set to Message Mode.")
         setModuleStatus("Active")
         setDeviceStatus("ok")
         return true
     } else {
-        logWarn("PIM failed to set to command mode.")
+        logWarn("PIM failed to set to Message Mode.")
         setModuleStatus("Inactive")
-        setDeviceStatus("error", "Failed to set PIM to command mode", true)
+        setDeviceStatus("error", "Failed to set PIM to Message Mode", true)
         return false
     }
 }
 
-def transmitMessage(byte[] bytes) {
-    // When driver is updated, the deviceMutexes and deviceResponses get destroyed, so we ensure they exist.
-    deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
-    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', semaphore: new Semaphore(0)])
-    synchronized (deviceMutexes.get(device.deviceNetworkId)) {
-        logTrace("transmitMessage()")
-        long retry = 0
-        boolean exit = false
-        String sendStatus = 'None'
-        def responseEntry = deviceResponses.get(device.deviceNetworkId)
+def readPimRegister(byte register, int numRegisters) {
+    logTrace("readPimRegister(register=0x%02X, numRegisters=%d)", register, numRegisters)
+    if (numRegisters < 1 || numRegisters > 16) {
+        logError("Invalid number of registers: %d (must be 1-16)", numRegisters)
+        return 'Failed'
+    }
 
-        while (!exit) {
-            switch (sendStatus) {
-                case 'None':
-                    sendStatus = 'Sent'
-                    responseEntry.response = 'None'
-                    responseEntry.semaphore.drainPermits() // Reset permits to 0
-                    sendBytes(bytes)
-                    logDebug("Message sent to PIM.")
-                    break
-                case 'Sent':
-                    // Wait for the response to be set by parse()
+    deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
+    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
+
+    byte[] packetData = [register, numRegisters] as byte[]
+    byte[] encodedPacket = encodePimPacket(packetData)
+
+    def message = new ByteArrayOutputStream()
+    message.write(READ_REGISTER)
+    message.write(encodedPacket)
+    message.write(EOM)
+    byte[] bytes = message.toByteArray()
+
+    synchronized (deviceMutexes.get(device.deviceNetworkId)) {
+        def retry = 0
+        def maxIterations = maxRetry + 10
+        def iteration = 0
+        def finalResult = 'Failed'
+        def resultData = null
+
+        while (iteration++ < maxIterations) {
+            def responseEntry = deviceResponses.get(device.deviceNetworkId)
+            responseEntry.response = 'None'
+            responseEntry.data = null
+            responseEntry.semaphore.drainPermits()
+            sendBytes(bytes)
+            logDebug("Read register message sent to PIM: %s (register=0x%02X, numRegisters=%d)", new String(encodedPacket), register, numRegisters)
+
+            if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                def response = responseEntry.response
+                if (response == 'PA') {
+                    logDebug("PIM accepted read register message (PA)")
+                    responseEntry.semaphore.drainPermits()
                     if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
-                        def response = responseEntry.response
-                        switch (response) {
-                            case "PA":
-                                sendStatus = 'Success'
-                                break
-                            case "PE":
-                                sendStatus = 'Failed'
-                                break
-                            case "PB":
-                                sendStatus = 'Retry'
-                                break
-                            default:
-                                logError("PIM response is invalid %s.", response)
-                                sendStatus = 'Failed'
-                                break
+                        response = responseEntry.response
+                        if (response == 'PR') {
+                            if (responseEntry.data?.length >= 2 + numRegisters) {
+                                // PR response: PRRRVV, skip RR (2 bytes)
+                                resultData = responseEntry.data[2..(1 + numRegisters)]
+                                logDebug("Received register report (PR) with data: %s", HexUtils.byteArrayToHexString(resultData))
+                                finalResult = 'Success'
+                            } else {
+                                logError("Invalid PR response data length: %d (expected >= %d)", responseEntry.data?.length ?: 0, 2 + numRegisters)
+                            }
+                            break
                         }
                     } else {
-                        logError("Timeout waiting for PIM response")
-                        sendStatus = 'Failed'
+                        logError("Timeout waiting for PR response")
                     }
+                } else if (response == 'PE') {
+                    logError("PIM rejected read register message (PE)")
                     break
-                case 'Retry':
-                    if (retry++ < maxRetry) {
-                        logDebug("Retrying to send message to PIM.")
-                        sendBytes(bytes)
-                        sendStatus = 'Sent'
-                    } else {
-                        logError("Retry limit reached.")
-                        sendStatus = 'Failed'
-                    }
-                    break
-                case 'Failed':
-                    logError("Message could not be sent.")
-                    exit = true
-                    break
-                case 'Success':
-                    logDebug("Message was sent successfully.")
-                    exit = true
-                    break
+                } else if (response == 'PB' && retry++ < maxRetry) {
+                    logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
+                    pauseExecution(100)
+                    continue
+                }
+            } else {
+                logWarn("Timeout waiting for initial PA response, retrying")
+                if (retry++ >= maxRetry) break
+                pauseExecution(100)
             }
         }
-        return responseEntry.response == 'PA'
+
+        if (iteration >= maxIterations) {
+            logError("Read register aborted: Maximum iterations reached")
+        }
+        return finalResult == 'Success' ? [result: finalResult, data: resultData] : finalResult
+    }
+}
+
+def writePimRegister(byte register, byte[] values) {
+    logTrace("writePimRegister(register=0x%02X, values=%s)", register, HexUtils.byteArrayToHexString(values))
+    if (values.length < 1 || values.length > 16) {
+        logError("Invalid number of values: %d (must be 1-16)", values.length)
+        return false
+    }
+
+    deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
+    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
+
+    def packetData = new ByteArrayOutputStream()
+    packetData.write(register)
+    packetData.write(values)
+    byte[] encodedPacket = encodePimPacket(packetData.toByteArray())
+
+    def message = new ByteArrayOutputStream()
+    message.write(WRITE_REGISTER)
+    message.write(encodedPacket)
+    message.write(EOM)
+    byte[] bytes = message.toByteArray()
+
+    synchronized (deviceMutexes.get(device.deviceNetworkId)) {
+        def retry = 0
+        def maxIterations = maxRetry + 10
+        def iteration = 0
+        def finalResult = false
+
+        while (iteration++ < maxIterations) {
+            def responseEntry = deviceResponses.get(device.deviceNetworkId)
+            responseEntry.response = 'None'
+            responseEntry.data = null
+            responseEntry.semaphore.drainPermits()
+            sendBytes(bytes)
+            logDebug("Write register message sent to PIM: %s (register=0x%02X, values=%s)", new String(encodedPacket), register, values)
+
+            if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                def response = responseEntry.response
+                if (response == 'PA') {
+                    logDebug("PIM accepted write register message (PA)")
+                    finalResult = true
+                    break
+                } else if (response == 'PE') {
+                    logError("PIM rejected write register message (PE)")
+                    break
+                } else if (response == 'PB' && retry++ < maxRetry) {
+                    logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
+                    pauseExecution(100)
+                    continue
+                }
+            } else {
+                logWarn("Timeout waiting for PA response, retrying")
+                if (retry++ >= maxRetry) break
+                pauseExecution(100)
+            }
+        }
+
+        if (iteration >= maxIterations) {
+            logError("Write register aborted: Maximum iterations reached")
+        }
+        return finalResult
+    }
+}
+
+def transmitMessage(byte[] upbMessage) {
+    logTrace("transmitMessage(upbMessage=%s)", upbMessage)
+    deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
+    deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
+
+    byte[] encodedPacket = encodePimPacket(upbMessage)
+
+    def message = new ByteArrayOutputStream()
+    message.write(TRANSMIT_MESSAGE)
+    message.write(encodedPacket)
+    message.write(EOM)
+    byte[] bytes = message.toByteArray()
+
+    synchronized (deviceMutexes.get(device.deviceNetworkId)) {
+        def retry = 0
+        def maxIterations = maxRetry + 10
+        def iteration = 0
+        def finalResult = 'Failed'
+
+        while (iteration++ < maxIterations) {
+            def responseEntry = deviceResponses.get(device.deviceNetworkId)
+            responseEntry.response = 'None'
+            responseEntry.data = null
+            responseEntry.semaphore.drainPermits()
+            sendBytes(bytes)
+            logDebug("UPB message sent to PIM: %s", new String(encodedPacket))
+
+            if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                def response = responseEntry.response
+                if (response == 'PA') {
+                    logDebug("PIM accepted UPB message (PA)")
+                    responseEntry.semaphore.drainPermits()
+                    if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                        response = responseEntry.response
+                        if (response in ['PK', 'PN']) {
+                            finalResult = response == 'PK' ? 'Success' : 'NoAck'
+                            logDebug("Transmission completed with %s (%s)", response == 'PK' ? 'ACK' : 'NAK', response)
+                            break
+                        }
+                    } else {
+                        logError("Timeout waiting for PK/PN response")
+                    }
+                } else if (response == 'PE') {
+                    logError("PIM rejected UPB message (PE)")
+                    break
+                } else if (response == 'PB' && retry++ < maxRetry) {
+                    logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
+                    pauseExecution(100)
+                    continue
+                }
+            } else {
+                logWarn("Timeout waiting for initial PA response, retrying")
+                if (retry++ >= maxRetry) break
+                pauseExecution(100)
+            }
+        }
+
+        if (iteration >= maxIterations) {
+            logError("UPB message transmission aborted: Maximum iterations reached")
+        }
+        return finalResult
     }
 }
 
@@ -529,589 +597,63 @@ def asyncParseMessageReport(Map data) {
     try {
         def messageData = data?.messageData
         if (messageData) {
-            parseMessageReport(messageData.collect { it as byte } as byte[])
+            processMessage(messageData.collect { it as byte } as byte[])
         } else {
-            logWarn("No message data in asyncParseMessageReport.")
+            logWarn("No message data in asyncParseMessageReport")
         }
     } catch (Exception e) {
         logError("Error in asyncParseMessageReport: ${e.message}")
     }
 }
 
-def parseMessageReport(byte[] data) {
-    logTrace("parseMessageReport(%s)",data)
+def processMessage(byte[] data) {
+    logTrace("processMessage(%s)", data)
     def messageDataString = HexUtils.byteArrayToHexString(data)
 
-    // Validate packet length
-    if (data.size() < 5) {
-        logError("[${messageDataString}]: Invalid UPB packet, too short.")
-        return
-    }
+    try {
+        def packet = parsePacket(data)
+        def controlWord = packet.controlWord
+        def networkId = packet.networkId
+        def destinationId = packet.destinationId
+        def sourceId = packet.sourceId
+        def messageDataId = packet.messageDataId
+        def messageSetId = packet.messageSetId
+        def messageArgs = packet.messageArgs
 
-    // Validate checksum
-    byte sum = 0
-    data.each { b -> sum += (b & 0xFF) } // Unsigned summation
-    if (sum != 0) {
-        logError("[%s]: Invalid checksum CHK=0x%02X (%d)", messageDataString, sum, sum)
-        return
-    }
+        logDebug("Handling %s (0x%02X): controlWord=0x%04X, networkId=0x%02X, sourceId=0x%02X, destinationId=0x%02X, messageDataId=0x%02X, messageArgs=%s",
+                getMsidName(messageSetId), messageSetId, controlWord, networkId, sourceId, destinationId, messageDataId, messageArgs)
 
-    // Parse 5-byte UPB header
-    short controlWord = (short) (((data[0] & 0xFF) << 8) | (data[1] & 0xFF))
-    byte networkId = data[2]
-    byte destinationId = data[3]
-    byte sourceId = data[4]
-    logTrace("[%s]: HDR Control=0x%04X (%d), NID=0x%02X (%d), DID=0x%02X (%d), SID=0x%02X (%d)",
-            messageDataString, controlWord, controlWord,
-            networkId, networkId,
-            destinationId, destinationId,
-            sourceId, sourceId)
-
-    // Parse UPB message
-    byte[] messageContent = data[5..-2]
-    if (messageContent.size() < 1) {
-        logError("[${messageDataString}]: No message data.")
-        return
-    }
-
-    byte messageDataId = messageContent[0]
-    byte messageSetId = (messageDataId >> 5) & 0x07
-    byte messageId = messageDataId & 0x1F
-
-    logTrace("[%s]: MDID=0x%02X (%d), MSID=0x%02X (%d), MID=0x%02X (%d)",
-            messageDataString,
-            messageDataId, messageDataId,
-            messageSetId,messageSetId,
-            messageId,messageId)
-
-    // Initialize messageArgs as an empty byte array
-    byte[] messageArgs = new byte[0]
-    if (messageContent.size() > 1) {
-        messageArgs = messageContent[1..-1]
-    }
-
-    logTrace("[%s]: MDA=%s", messageDataString, messageArgs)
-
-    switch(messageSetId) {
-        case UPB_CORE_COMMAND:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            processCoreCommand(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
-            break
-        case UPB_DEVICE_CONTROL_COMMAND:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            processDeviceControlCommand(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
-            break
-        case UPB_RESERVED_COMAND_SET_1:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            break
-        case UPB_RESERVED_COMAND_SET_2:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            break
-        case UPB_CORE_REPORTS:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            processCoreReport(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
-            break
-        case UPB_RESERVED_REPORT_SET_1:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            break
-        case UPB_RESERVED_REPORT_SET_2:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            break
-        case UPB_EXTENDED_MESSAGE_SET:
-            logDebug("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            processExtendedMessage(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgs)
-            break
-        default:
-            logError("Handling %s (0x%02X): controlWord=0x%04X (%d), networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s",
-                    getMsidName(messageSetId), messageSetId,
-                    controlWord, controlWord,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageDataId, messageDataId,
-                    messageArgs)
-            break
+        def args = messageArgs.collect { it & 0xFF } as int[]
+        switch (messageSetId) {
+            case UPB_CORE_COMMAND:
+                handleCommand(getMdidName(messageDataId), networkId, sourceId, destinationId, args)
+                break
+            case UPB_DEVICE_CONTROL_COMMAND:
+                if (messageDataId in [UPB_ACTIVATE_LINK, UPB_DEACTIVATE_LINK]) {
+                    getParent().handleLinkEvent("pim", getMdidName(messageDataId), networkId & 0xFF, sourceId & 0xFF, destinationId & 0xFF)
+                } else if (messageDataId in [UPB_GOTO, UPB_REPORT_STATE]) {
+                    getParent().handleDeviceEvent("pim", getMdidName(messageDataId), networkId & 0xFF, sourceId & 0xFF, destinationId & 0xFF, args)
+                } else {
+                    handleCommand(getMdidName(messageDataId), networkId, sourceId, destinationId, args)
+                }
+                break
+            case UPB_CORE_REPORTS:
+                if (messageDataId == UPB_DEVICE_STATE && args.size() >= 1) {
+                    getParent().handleDeviceEvent("pim", getMdidName(messageDataId), networkId & 0xFF, sourceId & 0xFF, destinationId & 0xFF, args)
+                } else {
+                    handleCommand(getMdidName(messageDataId), networkId, sourceId, destinationId, args)
+                }
+                break
+            case UPB_EXTENDED_MESSAGE_SET:
+                logWarn("Unsupported extended message: MDID=0x%02X", messageDataId)
+                break
+        }
+    } catch (IllegalArgumentException e) {
+        logError("[${messageDataString}]: ${e.message}")
     }
 }
 
-void processCoreCommand(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processCoreCommand(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
-            controlWord, controlWord,
-            networkId, networkId,
-            destinationId, destinationId,
-            sourceId, sourceId,
-            messageDataId,messageDataId,
-            messageArgs)
-
-    switch(messageDataId) {
-        case UPB_NULL_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_WRITE_ENABLED_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_WRITE_PROTECT_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_START_SETUP_MODE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_STOP_SETUP_MODE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_GET_SETUP_TIME_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_AUTO_ADDRESS_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_GET_DEVICE_STATUS_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_SET_DEVICE_CONTROL_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_ADD_LINK_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_DEL_LINK_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_TRANSMIT_MESSAGE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_DEVICE_RESET_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_GET_DEVICE_SIG_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_GET_REGISTER_VALUE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_SET_REGISTER_VALUE_COMMAND:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        default:
-            logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-    }
-}
-
-void processDeviceControlCommand(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processDeviceControlCommand(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
-            controlWord, controlWord,
-            networkId, networkId,
-            destinationId, destinationId,
-            sourceId, sourceId,
-            messageDataId,messageDataId,
-            messageArgs)
-
-    switch(messageDataId) {
-        case UPB_ACTIVATE_LINK:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), linkId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
-            break
-        case UPB_DEACTIVATE_LINK:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), linkId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            getParent().handleLinkEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF)
-            break
-        case UPB_GOTO:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            int[] args = messageArgs.collect { it & 0xFF } as int[]
-            getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
-            break
-        case UPB_FADE_START:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_FADE_STOP:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_BLINK:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_INDICATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_TOGGLE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_REPORT_STATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_STORE_STATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        default:
-            logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-    }
-}
-
-void processCoreReport(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processCoreReport(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
-            controlWord, controlWord,
-            networkId, networkId,
-            destinationId, destinationId,
-            sourceId, sourceId,
-            messageDataId,messageDataId,
-            messageArgs)
-    def argsHex = messageArgs.collect { String.format("0x%02X", it & 0xFF) }
-    switch(messageDataId) {
-        case UPB_ACK_RESPONSE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_SETUP_TIME:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_DEVICE_STATE:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            if (messageArgs.size() < 1) {
-                logError("[%s]: No state data in Device State Report", messageDataString)
-                return
-            }
-            int[] args = messageArgs.collect { it & 0xFF } as int[]
-            getParent().handleDeviceEvent("pim",getMdidName(messageDataId),networkId & 0xFF,sourceId & 0xFF,destinationId & 0xFF,args)
-            break
-        case UPB_DEVICE_STATUS:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_DEVICE_SIG:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_REGISTER_VALUES:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_RAM_VALUES:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_RAW_DATA:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        case UPB_HEARTBEAT:
-            logDebug("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-        default:
-            logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-                    getMdidName(messageDataId), messageDataId,
-                    networkId, networkId,
-                    sourceId, sourceId,
-                    destinationId, destinationId,
-                    messageArgs)
-            break
-    }
-}
-
-void processExtendedMessage(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgs) {
-    logTrace("processExtendedMessage(controlWord=0x%04X (%d), networkId=0x%02X (%d), destinationId=0x%02X (%d), sourceId=0x%02X (%d), messageDataId=0x%02X (%d), messageArgs=%s)",
-            controlWord, controlWord,
-            networkId, networkId,
-            destinationId, destinationId,
-            sourceId, sourceId,
-            messageDataId,messageDataId,
-            messageArgs)
-
-    logError("Handling %s (0x%02X) networkId=0x%02X (%d), sourceId=0x%02X (%d), destinationId=0x%02X (%d), messageArgs=%s",
-            getMdidName(messageDataId), messageDataId,
-            networkId, networkId,
-            sourceId, sourceId,
-            destinationId, destinationId,
-            messageArgs)
-}
-
-// Helper methods for readable logging
-private String getMsidName(int msid) {
-    switch (msid) {
-        case UPB_CORE_COMMAND: return "UPB_CORE_COMMAND"
-        case UPB_DEVICE_CONTROL_COMMAND: return "UPB_DEVICE_CONTROL_COMMAND"
-        case UPB_RESERVED_COMAND_SET_1: return "UPB_RESERVED_COMAND_SET_1"
-        case UPB_RESERVED_COMAND_SET_2: return "UPB_RESERVED_COMAND_SET_2"
-        case UPB_CORE_REPORTS: return "UPB_CORE_REPORTS"
-        case UPB_RESERVED_REPORT_SET_1: return "UPB_RESERVED_REPORT_SET_1"
-        case UPB_RESERVED_REPORT_SET_2: return "UPB_RESERVED_REPORT_SET_2"
-        case UPB_EXTENDED_MESSAGE_SET: return "UPB_EXTENDED_MESSAGE_SET"
-        default: return "UNKNOWN_MSID"
-    }
-}
-
-private String getMdidName(int mdid) {
-    switch (mdid) {
-        case UPB_NULL_COMMAND: return "UPB_NULL_COMMAND"
-        case UPB_WRITE_ENABLED_COMMAND: return "UPB_WRITE_ENABLED_COMMAND"
-        case UPB_WRITE_PROTECT_COMMAND: return "UPB_WRITE_PROTECT_COMMAND"
-        case UPB_START_SETUP_MODE_COMMAND: return "UPB_START_SETUP_MODE_COMMAND"
-        case UPB_STOP_SETUP_MODE_COMMAND: return "UPB_STOP_SETUP_MODE_COMMAND"
-        case UPB_GET_SETUP_TIME_COMMAND: return "UPB_GET_SETUP_TIME_COMMAND"
-        case UPB_AUTO_ADDRESS_COMMAND: return "UPB_AUTO_ADDRESS_COMMAND"
-        case UPB_GET_DEVICE_STATUS_COMMAND: return "UPB_GET_DEVICE_STATUS_COMMAND"
-        case UPB_SET_DEVICE_CONTROL_COMMAND: return "UPB_SET_DEVICE_CONTROL_COMMAND"
-        case UPB_ADD_LINK_COMMAND: return "UPB_ADD_LINK_COMMAND"
-        case UPB_DEL_LINK_COMMAND: return "UPB_DEL_LINK_COMMAND"
-        case UPB_TRANSMIT_MESSAGE_COMMAND: return "UPB_TRANSMIT_MESSAGE_COMMAND"
-        case UPB_DEVICE_RESET_COMMAND: return "UPB_DEVICE_RESET_COMMAND"
-        case UPB_GET_DEVICE_SIG_COMMAND: return "UPB_GET_DEVICE_SIG_COMMAND"
-        case UPB_GET_REGISTER_VALUE_COMMAND: return "UPB_GET_REGISTER_VALUE_COMMAND"
-        case UPB_SET_REGISTER_VALUE_COMMAND: return "UPB_SET_REGISTER_VALUE_COMMAND"
-        case UPB_ACTIVATE_LINK: return "UPB_ACTIVATE_LINK"
-        case UPB_DEACTIVATE_LINK: return "UPB_DEACTIVATE_LINK"
-        case UPB_GOTO: return "UPB_GOTO"
-        case UPB_FADE_START: return "UPB_FADE_START"
-        case UPB_FADE_STOP: return "UPB_FADE_STOP"
-        case UPB_BLINK: return "UPB_BLINK"
-        case UPB_INDICATE: return "UPB_INDICATE"
-        case UPB_TOGGLE: return "UPB_TOGGLE"
-        case UPB_REPORT_STATE: return "UPB_REPORT_STATE"
-        case UPB_STORE_STATE: return "UPB_STORE_STATE"
-        case UPB_ACK_RESPONSE: return "UPB_ACK_RESPONSE"
-        case UPB_SETUP_TIME: return "UPB_SETUP_TIME"
-        case UPB_DEVICE_STATE: return "UPB_DEVICE_STATE"
-        case UPB_DEVICE_STATUS: return "UPB_DEVICE_STATUS"
-        case UPB_DEVICE_SIG: return "UPB_DEVICE_SIG"
-        case UPB_REGISTER_VALUES: return "UPB_REGISTER_VALUES"
-        case UPB_RAM_VALUES: return "UPB_RAM_VALUES"
-        case UPB_RAW_DATA: return "UPB_RAW_DATA"
-        case UPB_HEARTBEAT: return "UPB_HEARTBEAT"
-        default: return "UNKNOWN_MDID"
-    }
+private void handleCommand(String commandName, byte networkId, byte sourceId, byte destinationId, int[] args) {
+    logDebug("Handling %s: networkId=0x%02X, sourceId=0x%02X, destinationId=0x%02X, args=%s",
+            commandName, networkId, sourceId, destinationId, args)
 }
