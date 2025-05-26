@@ -174,22 +174,31 @@ def refresh() {
     logTrace("refresh()")
     try {
         isCorrectParent()
-        byte[] data = getParent().buildDeviceStateRequestCommand(settings.networkId.intValue(), settings.deviceId.intValue())
-        logDebug("UPB Device State Request Command [${data}]")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Device State Request successfully sent [${data}]")
-            sendEvent(name: "status", value: "ok", isStateChange: false)
-        } else {
-            def error = "Failed to issue Device State Request command [${data}]"
-            logDebug error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
         }
+        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Device ID must be 0-255")
+        }
+
+        getParent().requestDeviceState(settings.networkId.intValue(), settings.deviceId.intValue(), 0)
+        logDebug("Device state request succeeded")
+        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("Device state request failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     } catch (Exception e) {
-        logWarn("Refresh failed: ${e.message}")
+        logWarn("Refresh failed: %s", e.message)
         sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
 
@@ -202,6 +211,7 @@ def on() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     }
 }
 
@@ -214,6 +224,7 @@ def off() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     }
 }
 
@@ -230,6 +241,7 @@ def cycleSpeed() {
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
     }
 }
 
@@ -237,30 +249,44 @@ def setSpeed(String speed) {
     logTrace("setSpeed(${speed})")
     try {
         isCorrectParent()
+        // Validate inputs
+        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Network ID must be 0-255")
+        }
+        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Device ID must be 0-255")
+        }
+        if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
+            logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
+            throw new IllegalArgumentException("Channel ID must be 0-255")
+        }
         if (!SUPPORTED_SPEEDS.contains(speed)) {
-            def error = "Invalid speed: ${speed}. Supported speeds: ${SUPPORTED_SPEEDS.join(', ')}"
-            logWarn error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
-            return
+            logError("Invalid speed: ${speed}. Supported speeds: ${SUPPORTED_SPEEDS.join(', ')}")
+            throw new IllegalArgumentException("Invalid speed: ${speed}")
         }
 
         def level = SPEED_TO_LEVEL[speed]
-        byte[] data = getParent().buildGotoCommand(settings.networkId.intValue(), settings.deviceId.intValue(), level, 0, settings.channelId.intValue())
-        logDebug("UPB Command Goto [${data}] for speed ${speed} (level ${level}%)")
-        if (getParent().sendPimMessage(data)) {
-            logDebug("Command successfully sent [${data}]")
-            def switchValue = (speed == "off") ? "off" : "on"
-            sendEvent(name: "switch", value: switchValue, isStateChange: true)
-            sendEvent(name: "speed", value: speed, isStateChange: true)
-            sendEvent(name: "status", value: "ok", isStateChange: false)
-        } else {
-            def error = "Failed to set speed ${speed} with command [${data}]"
-            logDebug error
-            sendEvent(name: "status", value: "error", descriptionText: error, isStateChange: true)
-        }
+        logDebug("Setting speed ${speed} (level ${level}%) for device [${settings.deviceId}]")
+        getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0, level, 0, settings.channelId.intValue())
+        logDebug("Set speed command succeeded")
+        def switchValue = (speed == "off") ? "off" : "on"
+        sendEvent(name: "switch", value: switchValue, isStateChange: true)
+        sendEvent(name: "speed", value: speed, isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (RuntimeException e) {
+        logError("Set speed failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        throw e
+    } catch (Exception e) {
+        logWarn("Set speed failed: %s", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: "Set speed failed: ${e.message}", isStateChange: true)
+        throw e
     }
 }
 
