@@ -127,13 +127,13 @@ def addDevicePage() {
 
             if (settings.deviceType && DEVICE_TYPES[settings.deviceType]) {
                 // Common inputs for all device types
-                input name: "deviceName", type: "text", title: "Device Name", required: true, submitOnChange: true
-                input name: "voiceName", type: "text", title: "Voice Name", required: false, submitOnChange: true
-                input name: "networkId", type: "number", title: "Network ID", required: true, range: "0..255", submitOnChange: true
+                input name: "deviceName", type: "text", title: "Device Name", required: true, submitOnChange: false
+                input name: "voiceName", type: "text", title: "Voice Name", required: false, submitOnChange: false
+                input name: "networkId", type: "number", title: "Network ID", required: true, range: "0..255", submitOnChange: false
 
                 // Dynamically render inputs based on device type
                 DEVICE_TYPES[settings.deviceType].requiredInputs.each { inputConfig ->
-                    input(inputConfig + [submitOnChange: true])
+                    input(inputConfig + [submitOnChange: false])
                 }
             }
         }
@@ -317,6 +317,8 @@ def createDevice() {
 def mainPage() {
     getHubUrl()
     dynamicPage(install: true, uninstall: true) {
+        /*
+		// Section removed until the configuration app is ready.
         section("UPBeat Configuration") {
             if (enableConfig) {
                 if (!state.accessToken) {
@@ -354,9 +356,30 @@ def mainPage() {
             }
             input name: "enableConfig", type: "bool", title: "Enable Remote Configuration", defaultValue: false, submitOnChange: true
         }
-        section("Devices") {
-            input "refreshAllDeviceStates", "button", title: "Refresh All Devices States"
+        */
+        section("Bulk Device Actions"){
+            input "refreshAllDeviceStates", "button", title: "Refresh All Device States"
 
+            def logLevels = [:]
+
+            LOG_LEVELS.values().each { level ->
+                logLevels.putIfAbsent(level, 0)
+            }
+
+            def devices = app.getChildDevices()
+            devices.each { device ->
+                logLevels[LOG_LEVELS[device.getSetting("logLevel").toInteger()]] += 1
+            }
+
+            def formattedLogLevels = logLevels.collect { level, count -> "- ${level}: ${count}"}.join("\n")
+            paragraph "Device count by log level:\n${formattedLogLevels}"
+
+            input name: "logLevelGlobal", type: "enum", options: LOG_LEVELS, title: "Global Log Level", description: "Select a log level for all devices", required: false, submitOnChange: true
+            if(logLevelGlobal){
+                input "setLogLevelGlobal", "button", title: "Apply Log Level Globally"
+            }
+        }
+        section("Device Management") {
             if (app.getInstallationState() == "COMPLETE") {
                 href(name: "manualAddHref", title: "Manually Add Device", page: "addDevicePage", description: "Add a device manually")
                 href(name: "manualAddHref", title: "Bulk Import", page: "bulkImportPage", description: "Import UPStart export file")
@@ -469,7 +492,10 @@ void appButtonHandler(button) {
             break
         case "refreshAllDeviceStates":
             refreshAllDeviceStates()
-            break;
+            break
+        case "setLogLevelGlobal":
+            setLogLevelGlobal()
+            break
     }
 }
 
@@ -529,6 +555,20 @@ def refreshAllDeviceStates() {
             pauseExecution(1000)
         }
     }
+}
+
+def setLogLevelGlobal() {
+    logTrace("setLogLevelGlobal(${logLevelGlobal})")
+    if (!LOG_LEVELS.containsKey(logLevelGlobal.toInteger())) {
+        logError("Invalid global log level: ${logLevelGlobal}")
+        return [result: false, reason: "Invalid global log level"]
+    }
+    def devices = app.getChildDevices()
+    devices.each { device ->
+        logInfo("Setting log level [${device.name}] to ${LOG_LEVELS[logLevelGlobal.toInteger()]}")
+        device.updateSetting("logLevel", [value: logLevelGlobal, type: "enum"])
+    }
+    app.clearSetting("logLevelGlobal")
 }
 
 /***************************************************************************
