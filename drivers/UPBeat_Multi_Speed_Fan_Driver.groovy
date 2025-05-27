@@ -16,9 +16,9 @@ metadata {
         capability "Switch"
         capability "FanControl"
         capability "Refresh"
-        command "setSpeed", [[name:"speed", type: "ENUM", constraints: ["off", "low", "medium", "high"], description: "Set the fan speed (off, low, medium, high)"]]
+        command "setSpeed", [[name:"speed", type: "ENUM", constraints: SPEED_TO_LEVEL.keySet().toList(), description: "Set the fan speed (${SPEED_TO_LEVEL.keySet().join(", ")})"]]
         attribute "status", "enum", ["ok", "error"]
-        attribute "speed", "enum", ["off", "low", "medium", "high"]
+        attribute "speed", "enum", SPEED_TO_LEVEL.keySet().toList()
     }
 
     preferences {
@@ -55,16 +55,22 @@ metadata {
         "high": 100
 ]
 
-@Field static final List SUPPORTED_SPEEDS = ["off", "low", "medium", "high"]
-
 /***************************************************************************
  * Helper Functions
  ***************************************************************************/
 private String levelToSpeed(int level) {
-    if (level == 0) return "off"
-    if (level <= 50) return "low"
-    if (level <= 75) return "medium"
-    return "high"
+    def sortedSpeeds = SPEED_TO_LEVEL.sort { it.value } // Sort by level
+    def prevLevel = -1
+    def selectedSpeed = sortedSpeeds.keySet().last() // Default to highest speed
+    sortedSpeeds.each { speed, currLevel ->
+        if (speed == "off" && level == 0) {
+            selectedSpeed = speed
+        } else if (level > prevLevel && level <= currLevel) {
+            selectedSpeed = speed
+        }
+        prevLevel = currLevel
+    }
+    return selectedSpeed
 }
 
 /***************************************************************************
@@ -240,9 +246,10 @@ def cycleSpeed() {
 
     def currentSpeed = device.currentValue("speed") ?: "off"
     logDebug("Current speed: ${currentSpeed}")
-    def speedIndex = SUPPORTED_SPEEDS.indexOf(currentSpeed)
-    def nextSpeedIndex = (speedIndex + 1) % SUPPORTED_SPEEDS.size()
-    def nextSpeed = SUPPORTED_SPEEDS[nextSpeedIndex]
+    def speeds = SPEED_TO_LEVEL.keySet().toList()
+    def speedIndex = speeds.indexOf(currentSpeed)
+    def nextSpeedIndex = (speedIndex + 1) % speeds.size()
+    def nextSpeed = speeds[nextSpeedIndex]
     return setSpeed(nextSpeed)
 }
 
@@ -271,8 +278,8 @@ def setSpeed(String speed) {
         sendEvent(name: "status", value: "error", descriptionText: "Channel ID must be 0-255", isStateChange: true)
         return [result: false, reason: "Channel ID must be 0-255"]
     }
-    if (!SUPPORTED_SPEEDS.contains(speed)) {
-        logError("Invalid speed: ${speed}. Supported speeds: ${SUPPORTED_SPEEDS.join(', ')}")
+    if (!SPEED_TO_LEVEL.containsKey(speed)) {
+        logError("Invalid speed: ${speed}. Supported speeds: ${SPEED_TO_LEVEL.keySet().join(', ')}")
         sendEvent(name: "status", value: "error", descriptionText: "Invalid speed: ${speed}", isStateChange: true)
         return [result: false, reason: "Invalid speed: ${speed}"]
     }
@@ -347,19 +354,23 @@ def handleGotoEvent(String eventSource, String eventType, int networkId, int sou
     logTrace("handleGotoEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, level=${level}, rate=${rate}, channel=${channel})")
     try {
         isCorrectParent()
+
         // Map level to fan speed
-        def speed
-        if (level == 0) {
-            speed = "off"
-        } else if (level <= 33) {
-            speed = "low"
-        } else if (level <= 66) {
-            speed = "medium"
-        } else {
-            speed = "high"
+        def speed = levelToSpeed(level)
+        def expected_level = SPEED_TO_LEVEL[speed]
+        def switchValue = (level == 0) ? "off" : "on"
+
+        if (expected_level != level)
+        {
+            logDebug("Updating switch to ${switchValue} and speed to ${speed} for device [${settings.deviceId}]")
+            setSpeed(speed)
         }
-        logDebug("Updating switch to ${(speed == "off") ? "off" : "on"} and speed to ${speed} for device [${settings.deviceId}]")
-        setSpeed(speed)
+        else
+        {
+            logDebug("Device already at expected level ${switchValue} and speed to ${speed} for device [${settings.deviceId}]")
+            sendEvent(name: "switch", value: switchValue, isStateChange: true)
+            sendEvent(name: "speed", value: speed, isStateChange: true)
+        }
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
@@ -374,18 +385,21 @@ def handleDeviceStateReport(String eventSource, String eventType, int networkId,
         int level = messageArgs.size() > channel ? Math.min(messageArgs[channel], 100) : 0
 
         // Map level to fan speed
-        def speed
-        if (level == 0) {
-            speed = "off"
-        } else if (level <= 33) {
-            speed = "low"
-        } else if (level <= 66) {
-            speed = "medium"
-        } else {
-            speed = "high"
+        def speed = levelToSpeed(level)
+        def expected_level = SPEED_TO_LEVEL[speed]
+        def switchValue = (level == 0) ? "off" : "on"
+
+        if (expected_level != level)
+        {
+            logDebug("Updating switch to ${switchValue} and speed to ${speed} for device [${settings.deviceId}]")
+            setSpeed(speed)
         }
-        logDebug("Updating switch to ${(speed == "off") ? "off" : "on"} and speed to ${speed} for device [${settings.deviceId}]")
-        setSpeed(speed)
+        else
+        {
+            logDebug("Device already at expected level ${switchValue} and speed to ${speed} for device [${settings.deviceId}]")
+            sendEvent(name: "switch", value: switchValue, isStateChange: true)
+            sendEvent(name: "speed", value: speed, isStateChange: true)
+        }
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
