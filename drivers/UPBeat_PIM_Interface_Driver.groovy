@@ -529,7 +529,7 @@ def writePimRegister(byte register, byte[] values) {
 
 def transmitMessage(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgument) {
     logTrace("transmitMessage(controlWord=0x%04X, networkId=0x%02X, destinationId=0x%02X, sourceId=0x%02X, messageDataId=0x%02X, messageArgument=%s)",
-            controlWord, networkId, destinationId, sourceId, messageDataId, messageArgument ? HexUtils.byteArrayToHexString(messageArgument) : "null")
+            controlWord, networkId & 0xFF, destinationId & 0xFF, sourceId & 0xFF, messageDataId & 0xFF, messageArgument ? HexUtils.byteArrayToHexString(messageArgument) : "null")
 
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
@@ -559,7 +559,7 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
             responseEntry.data = null
             responseEntry.semaphore.drainPermits()
             sendBytes(bytes)
-            logDebug("UPB message sent to PIM: %s", new String(encodedPacket))
+            logDebug("UPB message sent to PIM: %s", HexUtils.byteArrayToHexString(packet))
 
             if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
                 def response = responseEntry.response
@@ -572,8 +572,13 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
                             logDebug("Transmission completed with ACK (PK)")
                             return true
                         } else if (response == 'PN') {
-                            logDebug("Transmission completed with NAK (PN)")
-                            return true
+                            if (controlWord & ACKRQ_PULSE) {
+                                logError("Transmission completed with NAK (PN), ACK pulse expected")
+                                throw new RuntimeException("NoAck: Device did not acknowledge message (PN)")
+                            } else {
+                                logDebug("Transmission completed with NAK (PN), no ACK pulse expected")
+                                return true
+                            }
                         }
                     } else {
                         logError("Timeout waiting for PK/PN response")

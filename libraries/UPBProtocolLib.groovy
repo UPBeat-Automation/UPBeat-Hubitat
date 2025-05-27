@@ -17,7 +17,7 @@ library(
 import hubitat.helper.HexUtils
 import groovy.transform.Field
 
-// Bit masks for control word fields
+// Control word bit masks
 @Field static final short CTRL_LNK_MASK = 0x8000    // Bit 15
 @Field static final short CTRL_REPRQ_MASK = 0x6000  // Bits 14-13
 @Field static final short CTRL_LEN_MASK = 0x1F00    // Bits 12-8
@@ -26,30 +26,26 @@ import groovy.transform.Field
 @Field static final short CTRL_CNT_MASK = 0x000C    // Bits 3-2
 @Field static final short CTRL_SEQ_MASK = 0x0003    // Bits 1-0
 
-// Control word field values
-@Field static final byte LNK_DIRECT = 0            // Direct packet (bit 15 = 0)
-@Field static final byte LNK_LINK = 1              // Link packet (bit 15 = 1)
-@Field static final byte REPRQ_NONE = 0            // No repeater (bits 14-13 = 00)
-@Field static final byte REPRQ_ONE = 1             // One repeater (bits 14-13 = 01)
-@Field static final byte REPRQ_TWO = 2             // Two repeaters (bits 14-13 = 10)
-@Field static final byte REPRQ_RESERVED = 3        // Reserved (bits 14-13 = 11)
-@Field static final byte ACKRQ_NONE = 0            // No ACK (bits 6-4 = 000)
-@Field static final byte ACKRQ_MSG = 1             // Message ACK (bit 6 = 1, 010)
-@Field static final byte ACKRQ_ID = 2              // ID pulse ACK (bit 5 = 1, 001)
-@Field static final byte ACKRQ_PULSE = 4           // Pulse ACK (bit 4 = 1, 100)
-@Field static final byte ACKRQ_MSG_ID = 3          // Message + ID ACK (bits 6-5 = 11)
-@Field static final byte ACKRQ_MSG_PULSE = 5       // Message + Pulse ACK (bits 6,4 = 11)
-@Field static final byte ACKRQ_ID_PULSE = 6        // ID + Pulse ACK (bits 5-4 = 11)
-@Field static final byte ACKRQ_ALL = 7             // All ACKs (bits 6-4 = 111)
-@Field static final byte RSV_ZERO = 0              // Reserved bit (bit 7 = 0)
-@Field static final byte CNT_ZERO = 0              // Transmission count 0 (bits 3-2 = 00)
-@Field static final byte CNT_ONE = 1               // Transmission count 1 (bits 3-2 = 01)
-@Field static final byte CNT_TWO = 2               // Transmission count 2 (bits 3-2 = 10)
-@Field static final byte CNT_THREE = 3             // Transmission count 3 (bits 3-2 = 11)
-@Field static final byte SEQ_ZERO = 0              // Sequence 0 (bits 1-0 = 00)
-@Field static final byte SEQ_ONE = 1               // Sequence 1 (bits 1-0 = 01)
-@Field static final byte SEQ_TWO = 2               // Sequence 2 (bits 1-0 = 10)
-@Field static final byte SEQ_THREE = 3             // Sequence 3 (bits 1-0 = 11)
+// Control word values
+@Field static final byte LNK_DIRECT = 0           // Direct packet
+@Field static final byte LNK_LINK = 1             // Link packet
+@Field static final byte REPRQ_NONE = 0           // No repeater
+@Field static final byte REPRQ_ONE = 1            // One repeater
+@Field static final byte REPRQ_TWO = 2            // Two repeaters
+@Field static final byte REPRQ_HALT = 3           // Halt repeaters
+@Field static final byte ACKRQ_NONE = 0           // No acknowledgment requests (bits 6-4 = 000)
+@Field static final byte ACKRQ_MSG = 0x40         // Message ACK (bit 6 = 1)
+@Field static final byte ACKRQ_ID = 0x20          // ID pulse ACK (bit 5 = 1)
+@Field static final byte ACKRQ_PULSE = 0x10       // Pulse ACK (bit 4 = 1)
+@Field static final byte CNT_ZERO = 0             // Transmission count 0
+@Field static final byte CNT_ONE = 1              // Transmission count 1
+@Field static final byte CNT_TWO = 2              // Transmission count 2
+@Field static final byte CNT_THREE = 3            // Transmission count 3
+@Field static final byte SEQ_ZERO = 0             // Sequence 0
+@Field static final byte SEQ_ONE = 1              // Sequence 1
+@Field static final byte SEQ_TWO = 2              // Sequence 2
+@Field static final byte SEQ_THREE = 3            // Sequence 3
+
 
 // MSID Mapping
 @Field static final byte UPB_CORE_COMMAND = 0x00
@@ -132,34 +128,28 @@ static Map parseControlWord(short controlWord) {
 }
 
 /**
- * Encodes UPB control word fields into a 16-bit control word.
+ * Encodes UPB control word fields into a 16-bit control word, excluding LEN.
  * @param lnk Link bit (0 = Direct, 1 = Link)
  * @param reprq Repeater Request (0-3)
- * @param len Packet length in bytes (6-24)
- * @param ackMsg Acknowledge Message request (0 or 1)
- * @param ackId ID Pulse request (0 or 1)
- * @param ackPulse ACK Pulse request (0 or 1)
+ * @param ackFlags Acknowledgment flags (bitwise OR of ACKRQ_MSG, ACKRQ_ID, ACKRQ_PULSE)
  * @param cnt Transmission Count (0-3)
  * @param seq Transmission Sequence (0-3)
- * @return The encoded 16-bit control word as a short.
+ * @return The encoded 16-bit control word as a short, with LEN set to 0.
+ * @throws IllegalArgumentException if inputs are invalid.
  */
-static short encodeControlWord(int lnk, int reprq, int len, int ackMsg, int ackId, int ackPulse, int cnt, int seq) {
+static short encodeControlWord(int lnk, int reprq, int ackFlags, int cnt, int seq) {
     if (lnk < 0 || lnk > 1) throw new IllegalArgumentException("LNK must be 0 or 1, got $lnk")
     if (reprq < 0 || reprq > 3) throw new IllegalArgumentException("REPRQ must be 0-3, got $reprq")
-    if (len < 6 || len > 24) throw new IllegalArgumentException("LEN must be 6-24, got $len")
-    if (ackMsg < 0 || ackMsg > 1) throw new IllegalArgumentException("ackMsg must be 0 or 1, got $ackMsg")
-    if (ackId < 0 || ackId > 1) throw new IllegalArgumentException("ackId must be 0 or 1, got $ackId")
-    if (ackPulse < 0 || ackPulse > 1) throw new IllegalArgumentException("ackPulse must be 0 or 1, got $ackPulse")
+    if (ackFlags < 0 || (ackFlags & ~(ACKRQ_MSG | ACKRQ_ID | ACKRQ_PULSE)) != 0) {
+        throw new IllegalArgumentException("Invalid ackFlags: $ackFlags, must be a combination of ACKRQ_MSG, ACKRQ_ID, ACKRQ_PULSE")
+    }
     if (cnt < 0 || cnt > 3) throw new IllegalArgumentException("CNT must be 0-3, got $cnt")
     if (seq < 0 || seq > 3) throw new IllegalArgumentException("SEQ must be 0-3, got $seq")
 
     short controlWord = 0
     controlWord |= (lnk << 15)
     controlWord |= (reprq << 13)
-    controlWord |= (len << 8)
-    controlWord |= (ackMsg << 6)
-    controlWord |= (ackId << 5)
-    controlWord |= (ackPulse << 4)
+    controlWord |= (ackFlags & (ACKRQ_MSG | ACKRQ_ID | ACKRQ_PULSE))
     controlWord |= (cnt << 2)
     controlWord |= seq
 

@@ -105,73 +105,74 @@ def activate() {
     logTrace("activate()")
     try {
         isCorrectParent()
-        // Validate inputs
-        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Network ID must be 0-255")
-        }
-        if (!settings.linkId || settings.linkId < 0 || settings.linkId > 255) {
-            logError("Link ID ${settings.linkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Link ID must be 0-255")
-        }
-
-        def networkId = settings.networkId.intValue()
-        def linkId = settings.linkId.intValue()
-        logDebug("Sending activate to scene [${linkId}] on Network ID [${networkId}]")
-        getParent().activateScene(networkId, linkId, 0)
-        logDebug("Scene activation succeeded")
-        getParent().handleLinkEvent("user", "UPB_ACTIVATE_LINK", networkId, 0, linkId)
-        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (RuntimeException e) {
-        logError("Scene activation failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (Exception e) {
-        logWarn("Scene activation failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: "Scene activate failed: ${e.message}", isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+
+    if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (!settings.linkId || settings.linkId < 0 || settings.linkId > 255) {
+        logError("Link ID ${settings.linkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Link ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Link ID must be 0-255"]
+    }
+
+    def networkId = settings.networkId.intValue()
+    def linkId = settings.linkId.intValue()
+    logDebug("Sending activate to scene [${linkId}] on Network ID [${networkId}]")
+    def result = getParent().activateScene(networkId, linkId, 0)
+
+    if (result.result) {
+        logDebug("Scene activation succeeded")
+        getParent().handleLinkEvent("user", "UPB_ACTIVATE_LINK", networkId, 0, linkId)
+    } else {
+        logError("Scene activation failed: %s", result.reason)
+        sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
+    }
+    return result
 }
 
 def deactivate() {
     logTrace("deactivate()")
     try {
         isCorrectParent()
-        // Validate inputs
-        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Network ID must be 0-255")
-        }
-        if (!settings.linkId || settings.linkId < 0 || settings.linkId > 255) {
-            logError("Link ID ${settings.linkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Link ID must be 0-255")
-        }
-
-        def networkId = settings.networkId.intValue()
-        def linkId = settings.linkId.intValue()
-        logDebug("Sending deactivate to scene [${linkId}] on Network ID [${networkId}]")
-        getParent().deactivateScene(networkId, linkId, 0)
-        logDebug("Scene deactivation succeeded")
-        getParent().handleLinkEvent("user", "UPB_DEACTIVATE_LINK", networkId, 0, linkId)
-        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (RuntimeException e) {
-        logError("Scene deactivation failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (Exception e) {
-        logWarn("Scene deactivation failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: "Scene deactivate failed: ${e.message}", isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+
+    if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (!settings.linkId || settings.linkId < 0 || settings.linkId > 255) {
+        logError("Link ID ${settings.linkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Link ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Link ID must be 0-255"]
+    }
+
+    def networkId = settings.networkId.intValue()
+    def linkId = settings.linkId.intValue()
+    logDebug("Sending deactivate to scene [${linkId}] on Network ID [${networkId}]")
+    def result = getParent().deactivateScene(networkId, linkId, 0)
+
+    if (result.result) {
+        logDebug("Scene deactivation succeeded")
+        getParent().handleLinkEvent("user", "UPB_DEACTIVATE_LINK", networkId, 0, linkId)
+    } else {
+        logError("Scene deactivation failed: %s", result.reason)
+        sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
+    }
+    return result
 }
+
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
