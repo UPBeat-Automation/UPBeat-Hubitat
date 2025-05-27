@@ -530,6 +530,7 @@ def writePimRegister(byte register, byte[] values) {
 def transmitMessage(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgument) {
     logTrace("transmitMessage(controlWord=0x%04X, networkId=0x%02X, destinationId=0x%02X, sourceId=0x%02X, messageDataId=0x%02X, messageArgument=%s)",
             controlWord, networkId & 0xFF, destinationId & 0xFF, sourceId & 0xFF, messageDataId & 0xFF, messageArgument ? HexUtils.byteArrayToHexString(messageArgument) : "null")
+    logDebug("ACK flags: pulse=%s, msg=%s, id=%s", (controlWord & ACKRQ_PULSE) != 0, (controlWord & ACKRQ_MSG) != 0, (controlWord & ACKRQ_ID) != 0)
 
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
@@ -548,6 +549,7 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
     message.write(EOM)
     byte[] bytes = message.toByteArray()
 
+    Map result = [result: false, reason: "Unknown failure"]
     synchronized (deviceMutexes.get(device.deviceNetworkId)) {
         def retry = 0
         def maxIterations = maxRetry + 10
@@ -570,23 +572,25 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
                         response = responseEntry.response
                         if (response == 'PK') {
                             logDebug("Transmission completed with ACK (PK)")
-                            return true
+                            result = [result: true, reason: "Success"]
+                            break
                         } else if (response == 'PN') {
                             if (controlWord & ACKRQ_PULSE) {
                                 logError("Transmission completed with NAK (PN), ACK pulse expected")
-                                throw new RuntimeException("NoAck: Device did not acknowledge message (PN)")
+                                result = [result: false, reason: "NoAck: Device did not acknowledge message (PN)"]
                             } else {
                                 logDebug("Transmission completed with NAK (PN), no ACK pulse expected")
-                                return true
+                                result = [result: true, reason: "Success, no ACK pulse expected"]
                             }
+                            break
                         }
                     } else {
                         logError("Timeout waiting for PK/PN response")
-                        throw new RuntimeException("Failed: Timeout waiting for ACK/NAK response")
+                        result = [result: false, reason: "Failed: Timeout waiting for ACK/NAK response"]
                     }
                 } else if (response == 'PE') {
                     logError("PIM rejected UPB message (PE)")
-                    throw new RuntimeException("Failed: PIM rejected message (PE)")
+                    result = [result: false, reason: "Failed: PIM rejected message (PE)"]
                 } else if (response == 'PB' && retry++ < maxRetry) {
                     logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
                     pauseExecution(100)
@@ -596,15 +600,14 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
                 logWarn("Timeout waiting for initial PA response, retrying")
                 if (retry++ >= maxRetry) {
                     logError("UPB message transmission aborted: Maximum iterations reached")
-                    throw new RuntimeException("Failed: Transmission aborted: Maximum iterations reached")
+                    result = [result: false, reason: "Failed: Transmission aborted: Maximum iterations reached"]
                 }
                 pauseExecution(100)
             }
         }
-
-        logError("UPB message transmission aborted: Maximum iterations reached")
-        throw new RuntimeException("Failed: Transmission aborted: Maximum iterations reached")
     }
+
+    return result
 }
 
 def asyncParseMessageReport(Map data) {
