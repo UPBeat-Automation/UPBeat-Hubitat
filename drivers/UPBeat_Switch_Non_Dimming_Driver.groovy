@@ -148,110 +148,113 @@ def refresh() {
     logTrace("refresh()")
     try {
         isCorrectParent()
-        // Validate inputs
-        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Network ID must be 0-255")
-        }
-
-        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
-            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Device ID must be 0-255")
-        }
-        getParent().requestDeviceState(settings.networkId.intValue(), settings.deviceId.intValue(), 0x00)
-        logDebug("Device state request succeeded")
-        sendEvent(name: "status", value: "ok", isStateChange: false)
-        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (RuntimeException e) {
-        logError("Device state request failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (Exception e) {
-        logWarn("Refresh failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+
+    // Validate inputs
+    if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (!settings.deviceId || settings.deviceId < 1 || settings.deviceId > 250) {
+        logError("Device ID ${settings.deviceId} is invalid or out of range (1-250)")
+        sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 1-250", isStateChange: true)
+        return [result: false, reason: "Device ID must be 1-250"]
+    }
+
+    def result = getParent().requestDeviceState(settings.networkId.intValue(), settings.deviceId.intValue(), 0)
+    if (result.result) {
+        logDebug("Device state request succeeded")
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } else {
+        logError("Device state request failed: %s", result.reason)
+        sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
+    }
+    return result
 }
 
 def on() {
     logTrace("on()")
     try {
         isCorrectParent()
-        // Validate inputs
-        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Network ID must be 0-255")
-        }
-        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
-            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Device ID must be 0-255")
-        }
-        if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
-            logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Channel ID must be 0-255")
-        }
-
-        getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0xFF, 100, 0, settings.channelId.intValue())
-        logDebug("On command succeeded")
-        sendEvent(name: "switch", value: "on", isStateChange: true)
-        sendEvent(name: "status", value: "ok", isStateChange: false)
-        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (RuntimeException e) {
-        logError("On command failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (Exception e) {
-        logWarn("On command failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: "On command failed: ${e.message}", isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+
+    // Validate inputs
+    if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (!settings.deviceId || settings.deviceId < 1 || settings.deviceId > 250) {
+        logError("Device ID ${settings.deviceId} is invalid or out of range (1-250)")
+        sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 1-250", isStateChange: true)
+        return [result: false, reason: "Device ID must be 1-250"]
+    }
+    if (!settings.channelId || settings.channelId < 1 || settings.channelId > 255) {
+        logError("Channel ID ${settings.channelId} is invalid or out of range (1-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Channel ID must be 1-255", isStateChange: true)
+        return [result: false, reason: "Channel ID must be 1-255"]
+    }
+
+    def result = getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 100, 0, settings.channelId.intValue())
+    if (result.result) {
+        logDebug("On command succeeded")
+        sendEvent(name: "switch", value: "on", isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } else {
+        logError("On command failed: %s", result.reason)
+        sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
+    }
+    return result
 }
 
 def off() {
     logTrace("off()")
     try {
         isCorrectParent()
-        // Validate inputs
-        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Network ID must be 0-255")
-        }
-        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
-            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Device ID must be 0-255")
-        }
-        if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
-            logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Channel ID must be 0-255")
-        }
-
-        getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0xFF, 0, 0, settings.channelId.intValue())
-        logDebug("Off command succeeded")
-        sendEvent(name: "switch", value: "off", isStateChange: true)
-        sendEvent(name: "status", value: "ok", isStateChange: false)
-        return true
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (RuntimeException e) {
-        logError("Off command failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (Exception e) {
-        logWarn("Off command failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: "Off command failed: ${e.message}", isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+
+    // Validate inputs
+    if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (!settings.deviceId || settings.deviceId < 1 || settings.deviceId > 250) {
+        logError("Device ID ${settings.deviceId} is invalid or out of range (1-250)")
+        sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 1-250", isStateChange: true)
+        return [result: false, reason: "Device ID must be 1-250"]
+    }
+    if (!settings.channelId || settings.channelId < 1 || settings.channelId > 255) {
+        logError("Channel ID ${settings.channelId} is invalid or out of range (1-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Channel ID must be 1-255", isStateChange: true)
+        return [result: false, reason: "Channel ID must be 1-255"]
+    }
+
+    def result = getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, 0, settings.channelId.intValue())
+    if (result.result) {
+        logDebug("Off command succeeded")
+        sendEvent(name: "switch", value: "off", isStateChange: true)
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } else {
+        logError("Off command failed: %s", result.reason)
+        sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
+    }
+    return result
 }
+
 /***************************************************************************
  * UPB Receive Handlers
  ***************************************************************************/
