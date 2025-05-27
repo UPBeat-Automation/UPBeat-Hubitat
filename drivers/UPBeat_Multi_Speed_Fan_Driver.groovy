@@ -174,120 +174,124 @@ def refresh() {
     logTrace("refresh()")
     try {
         isCorrectParent()
-        // Validate inputs
-        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Network ID must be 0-255")
-        }
-        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
-            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Device ID must be 0-255")
-        }
-
-        getParent().requestDeviceState(settings.networkId.intValue(), settings.deviceId.intValue(), 0)
-        logDebug("Device state request succeeded")
-        sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (RuntimeException e) {
-        logError("Device state request failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (Exception e) {
-        logWarn("Refresh failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: "Refresh failed: ${e.message}", isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+
+    if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+        logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Device ID must be 0-255"]
+    }
+
+    def result = getParent().requestDeviceState(settings.networkId.intValue(), settings.deviceId.intValue(), 0)
+    if (result.result) {
+        logDebug("Device state request succeeded")
+        sendEvent(name: "status", value: "ok", isStateChange: false)
+    } else {
+        logError("Device state request failed: %s", result.reason)
+        sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
+    }
+    return result
 }
 
 def on() {
     logTrace("on()")
     try {
         isCorrectParent()
-        logDebug("Sending ON to device [${settings.deviceId}]")
-        setSpeed("high")
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+    logDebug("Sending ON to device [${settings.deviceId}]")
+    return setSpeed("high")
 }
 
 def off() {
     logTrace("off()")
     try {
         isCorrectParent()
-        logDebug("Sending OFF to device [${settings.deviceId}]")
-        setSpeed("off")
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+    logDebug("Sending OFF to device [${settings.deviceId}]")
+    return setSpeed("off")
 }
 
 def cycleSpeed() {
     logTrace("cycleSpeed()")
     try {
         isCorrectParent()
-        def currentSpeed = device.currentValue("speed") ?: "off"
-        logDebug("Current speed: ${currentSpeed}")
-        def speedIndex = SUPPORTED_SPEEDS.indexOf(currentSpeed)
-        def nextSpeedIndex = (speedIndex + 1) % SUPPORTED_SPEEDS.size()
-        def nextSpeed = SUPPORTED_SPEEDS[nextSpeedIndex]
-        setSpeed(nextSpeed)
     } catch (IllegalStateException e) {
         log.error e.message
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
+        return [result: false, reason: e.message]
     }
+
+    def currentSpeed = device.currentValue("speed") ?: "off"
+    logDebug("Current speed: ${currentSpeed}")
+    def speedIndex = SUPPORTED_SPEEDS.indexOf(currentSpeed)
+    def nextSpeedIndex = (speedIndex + 1) % SUPPORTED_SPEEDS.size()
+    def nextSpeed = SUPPORTED_SPEEDS[nextSpeedIndex]
+    return setSpeed(nextSpeed)
 }
 
 def setSpeed(String speed) {
     logTrace("setSpeed(${speed})")
     try {
         isCorrectParent()
-        // Validate inputs
-        if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-            logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Network ID must be 0-255")
-        }
-        if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
-            logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Device ID must be 0-255")
-        }
-        if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
-            logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
-            throw new IllegalArgumentException("Channel ID must be 0-255")
-        }
-        if (!SUPPORTED_SPEEDS.contains(speed)) {
-            logError("Invalid speed: ${speed}. Supported speeds: ${SUPPORTED_SPEEDS.join(', ')}")
-            throw new IllegalArgumentException("Invalid speed: ${speed}")
-        }
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return [result: false, reason: e.message]
+    }
 
-        def level = SPEED_TO_LEVEL[speed]
-        logDebug("Setting speed ${speed} (level ${level}%) for device [${settings.deviceId}]")
-        getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0, level, 0, settings.channelId.intValue())
+    if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
+        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (!settings.deviceId || settings.deviceId < 0 || settings.deviceId > 255) {
+        logError("Device ID ${settings.deviceId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Device ID must be 0-255"]
+    }
+    if (!settings.channelId || settings.channelId < 0 || settings.channelId > 255) {
+        logError("Channel ID ${settings.channelId} is invalid or out of range (0-255)")
+        sendEvent(name: "status", value: "error", descriptionText: "Channel ID must be 0-255", isStateChange: true)
+        return [result: false, reason: "Channel ID must be 0-255"]
+    }
+    if (!SUPPORTED_SPEEDS.contains(speed)) {
+        logError("Invalid speed: ${speed}. Supported speeds: ${SUPPORTED_SPEEDS.join(', ')}")
+        sendEvent(name: "status", value: "error", descriptionText: "Invalid speed: ${speed}", isStateChange: true)
+        return [result: false, reason: "Invalid speed: ${speed}"]
+    }
+
+    def level = SPEED_TO_LEVEL[speed]
+    logDebug("Setting speed ${speed} (level ${level}%) for device [${settings.deviceId}]")
+    def result = getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0, level, 0, settings.channelId.intValue())
+
+    if (result.result) {
         logDebug("Set speed command succeeded")
         def switchValue = (speed == "off") ? "off" : "on"
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "speed", value: speed, isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
-    } catch (IllegalStateException e) {
-        log.error e.message
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (RuntimeException e) {
-        logError("Set speed failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
-        throw e
-    } catch (Exception e) {
-        logWarn("Set speed failed: %s", e.message)
-        sendEvent(name: "status", value: "error", descriptionText: "Set speed failed: ${e.message}", isStateChange: true)
-        throw e
+    } else {
+        logError("Set speed failed: %s", result.reason)
+        sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
     }
+    return result
 }
 
 /***************************************************************************
