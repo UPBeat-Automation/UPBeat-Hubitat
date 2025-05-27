@@ -636,7 +636,7 @@ def activateScene(Integer networkId, Integer linkId, Integer sourceId) {
         throw new IllegalArgumentException("Source ID must be 0-255")
     }
 
-    def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, 6, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
     try {
         pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_ACTIVATE_LINK, null)
         logDebug("Scene activation succeeded")
@@ -664,7 +664,7 @@ def deactivateScene(Integer networkId, Integer linkId, Integer sourceId) {
         throw new IllegalArgumentException("Source ID must be 0-255")
     }
 
-    def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, 6, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
     try {
         pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_DEACTIVATE_LINK, null)
         logDebug("Scene deactivation succeeded")
@@ -705,7 +705,7 @@ def gotoLevel(Integer networkId, Integer deviceId, Integer sourceId, Integer lev
         throw new IllegalArgumentException("Channel must be 0-255")
     }
 
-    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, 9, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
     try {
         pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_GOTO, [(byte) level, (byte) duration, (byte) channel] as byte[])
         logDebug("Goto level succeeded")
@@ -733,7 +733,7 @@ def requestDeviceState(Integer networkId, Integer deviceId, Integer sourceId) {
         throw new IllegalArgumentException("Source ID must be 0-255")
     }
 
-    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, 6, ACKRQ_NONE, 0, 0, CNT_ONE, SEQ_ZERO)
+    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
     try {
         pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_REPORT_STATE, null)
         logDebug("Device state request succeeded")
