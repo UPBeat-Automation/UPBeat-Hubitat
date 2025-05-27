@@ -625,26 +625,27 @@ def activateScene(Integer networkId, Integer linkId, Integer sourceId) {
     // Validate inputs
     if (networkId < 0 || networkId > 255) {
         logError("Network ID ${networkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Network ID must be 0-255")
+        return [result: false, reason: "Network ID must be 0-255"]
     }
     if (linkId < 0 || linkId > 255) {
         logError("Link ID ${linkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Link ID must be 0-255")
+        return [result: false, reason: "Link ID must be 0-255"]
     }
     if (sourceId < 0 || sourceId > 255) {
         logError("Source ID ${sourceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Source ID must be 0-255")
+        return [result: false, reason: "Source ID must be 0-255"]
     }
 
     def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
-    try {
-        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_ACTIVATE_LINK, null)
+    logDebug("Activating scene with controlWord=0x%04X", controlWord)
+    def result = pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_ACTIVATE_LINK, null)
+
+    if (result.result) {
         logDebug("Scene activation succeeded")
-        return true
-    } catch (RuntimeException e) {
-        logError("Scene activation failed: %s", e.message)
-        throw e
+    } else {
+        logError("Scene activation failed: %s", result.reason)
     }
+    return result
 }
 
 def deactivateScene(Integer networkId, Integer linkId, Integer sourceId) {
@@ -653,26 +654,27 @@ def deactivateScene(Integer networkId, Integer linkId, Integer sourceId) {
     // Validate inputs
     if (networkId < 0 || networkId > 255) {
         logError("Network ID ${networkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Network ID must be 0-255")
+        return [result: false, reason: "Network ID must be 0-255"]
     }
     if (linkId < 0 || linkId > 255) {
         logError("Link ID ${linkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Link ID must be 0-255")
+        return [result: false, reason: "Link ID must be 0-255"]
     }
     if (sourceId < 0 || sourceId > 255) {
         logError("Source ID ${sourceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Source ID must be 0-255")
+        return [result: false, reason: "Source ID must be 0-255"]
     }
 
     def controlWord = encodeControlWord(LNK_LINK, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
-    try {
-        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_DEACTIVATE_LINK, null)
+    logDebug("Deactivating scene with controlWord=0x%04X", controlWord)
+    def result = pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) linkId, (byte) sourceId, UPB_DEACTIVATE_LINK, null)
+
+    if (result.result) {
         logDebug("Scene deactivation succeeded")
-        return true
-    } catch (RuntimeException e) {
-        logError("Scene deactivation failed: %s", e.message)
-        throw e
+    } else {
+        logError("Scene deactivation failed: %s", result.reason)
     }
+    return result
 }
 
 def gotoLevel(Integer networkId, Integer deviceId, Integer sourceId, Integer level, Integer duration, Integer channel) {
@@ -682,38 +684,39 @@ def gotoLevel(Integer networkId, Integer deviceId, Integer sourceId, Integer lev
     // Validate inputs
     if (networkId < 0 || networkId > 255) {
         logError("Network ID ${networkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Network ID must be 0-255")
+        return [result: false, reason: "Network ID must be 0-255"]
     }
     if (deviceId < 0 || deviceId > 255) {
         logError("Device ID ${deviceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Device ID must be 0-255")
+        return [result: false, reason: "Device ID must be 0-255"]
     }
     if (sourceId < 0 || sourceId > 255) {
         logError("Source ID ${sourceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Source ID must be 0-255")
+        return [result: false, reason: "Source ID must be 0-255"]
     }
     if (level < 0 || level > 100) {
         logError("Level ${level} is out of range (0-100)")
-        throw new IllegalArgumentException("Level must be 0-100")
+        return [result: false, reason: "Level must be 0-100"]
     }
     if (duration < 0 || duration > 255) {
         logError("Duration ${duration} is out of range (0-255)")
-        throw new IllegalArgumentException("Duration must be 0-255")
+        return [result: false, reason: "Duration must be 0-255"]
     }
     if (channel < 0 || channel > 255) {
         logError("Channel ${channel} is out of range (0-255)")
-        throw new IllegalArgumentException("Channel must be 0-255")
+        return [result: false, reason: "Channel must be 0-255"]
     }
 
-    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
-    try {
-        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_GOTO, [(byte) level, (byte) duration, (byte) channel] as byte[])
+    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, ACKRQ_PULSE, CNT_ONE, SEQ_ZERO)
+    logDebug("Setting level with controlWord=0x%04X", controlWord)
+    def result = pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_GOTO, [(byte) level, (byte) duration, (byte) channel] as byte[])
+
+    if (result.result) {
         logDebug("Goto level succeeded")
-        return true
-    } catch (RuntimeException e) {
-        logError("Goto level failed: %s", e.message)
-        throw e
+    } else {
+        logError("Goto level failed: %s", result.reason)
     }
+    return result
 }
 
 def requestDeviceState(Integer networkId, Integer deviceId, Integer sourceId) {
@@ -722,26 +725,27 @@ def requestDeviceState(Integer networkId, Integer deviceId, Integer sourceId) {
     // Validate inputs
     if (networkId < 0 || networkId > 255) {
         logError("Network ID ${networkId} is out of range (0-255)")
-        throw new IllegalArgumentException("Network ID must be 0-255")
+        return [result: false, reason: "Network ID must be 0-255"]
     }
     if (deviceId < 0 || deviceId > 255) {
         logError("Device ID ${deviceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Device ID must be 0-255")
+        return [result: false, reason: "Device ID must be 0-255"]
     }
     if (sourceId < 0 || sourceId > 255) {
         logError("Source ID ${sourceId} is out of range (0-255)")
-        throw new IllegalArgumentException("Source ID must be 0-255")
+        return [result: false, reason: "Source ID must be 0-255"]
     }
 
-    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, ACKRQ_NONE, CNT_ONE, SEQ_ZERO)
-    try {
-        pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_REPORT_STATE, null)
+    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, ACKRQ_PULSE, CNT_ONE, SEQ_ZERO)
+    logDebug("Requesting device state with controlWord=0x%04X", controlWord)
+    def result = pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_REPORT_STATE, null)
+
+    if (result.result) {
         logDebug("Device state request succeeded")
-        return true
-    } catch (RuntimeException e) {
-        logError("Device state request failed: %s", e.message)
-        throw e
+    } else {
+        logError("Device state request failed: %s", result.reason)
     }
+    return result
 }
 
 /***************************************************************************
