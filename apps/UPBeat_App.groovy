@@ -151,62 +151,70 @@ def bulkImportPage() {
                     required: true,
                     rows: 20,
                     cols: 80,
-                    submitOnChange: true
+                    submitOnChange: false
         }
     }
 }
 
 def bulkImport() {
-    return dynamicPage(name: "bulkImport", title: "Device Import Completed", nextPage: "mainPage") {
-        section("Import Result") {
-            //paragraph "${settings.upeFileData}"
+    return dynamicPage(name: "bulkImport", title: "Device Import Results", nextPage: "mainPage") {
+        try {
             def data = processUpeFile(settings.upeFileData)
-            deleteAllDevices()
+            section() {
+                deleteAllDevices()
 
-            // Create Link Devices
-            data.links.each { link ->
-                def deviceNetworkId = buildSceneNetworkId( data.systemInfo.networkId, link.linkId)
-                def sceneName = link.name.trim().tokenize().collect { it.capitalize() }.join(' ')
-                paragraph "Adding link device [${deviceNetworkId}] with scene name [${sceneName}]"
-                childDevice = addChildDevice("UPBeat", "UPB Scene Actuator" , deviceNetworkId, [name: sceneName, label: sceneName])
-                childDevice.updateNetworkId(data.systemInfo.networkId)
-                childDevice.updateLinkId(link.linkId)
-            }
+                // Create Link Devices
+                data.links.each { link ->
+                    def deviceNetworkId = buildSceneNetworkId( data.systemInfo.networkId, link.linkId)
+                    def sceneName = link.name.trim().tokenize().collect { it.capitalize() }.join(' ')
+                    paragraph "Adding link device [${deviceNetworkId}] with scene name [${sceneName}]"
+                    childDevice = addChildDevice("UPBeat", "UPB Scene Actuator" , deviceNetworkId, [name: sceneName, label: sceneName])
+                    childDevice.updateNetworkId(data.systemInfo.networkId)
+                    childDevice.updateLinkId(link.linkId)
+                }
 
-            // Create Switch Devices
-            data.modules.each { module ->
-                module.channelInfo.each { channel ->
-                    def channelId = channel.channelId + 1
-                    def deviceNetworkId = buildDeviceNetworkId(module.networkId, module.moduleId, channelId)
-                    def deviceName = "${module.roomName} ${module.deviceName}".trim().tokenize().collect { it.capitalize() }.join(' ')
-                    if( channel.dimEnabled ){
-                        paragraph "Adding dimming switch [${deviceNetworkId}] with device name [${deviceName}]"
-                        childDevice = addChildDevice("UPBeat", "UPB Dimming Switch" , deviceNetworkId, [name: deviceName, label: deviceName])
-                        childDevice.updateNetworkId(module.networkId)
-                        childDevice.updateDeviceId(module.moduleId)
-                        childDevice.updateChannelId(channelId)
-                    } else {
-                        paragraph "Adding non-dimming switch [${deviceNetworkId}] with device name [${deviceName}]"
-                        childDevice = addChildDevice("UPBeat", "UPB Non-Dimming Switch" , deviceNetworkId, [name: deviceName, label: deviceName])
-                        childDevice.updateNetworkId(module.networkId)
-                        childDevice.updateDeviceId(module.moduleId)
-                        childDevice.updateChannelId(channelId)
-                    }
-
-                    def device = getChildDevice(deviceNetworkId)
-                    if (device){
-                        // Populate receive components
-                        module.presetInfo.each { preset ->
-                            if ( preset.channelId == channel.channelId && preset.linkId != 255 && preset.presetDimLevel != 255)
-                            {
-                                paragraph "Adding preset to [${deviceNetworkId}] with device name [${deviceName}] at slot ${preset.componentId}  ${preset.linkId}:${preset.presetDimLevel}"
-                                device.updateReceiveComponentSlot(preset.componentId + 1, preset.linkId, preset.presetDimLevel)
-                            }
+                // Create Switch Devices
+                data.modules.each { module ->
+                    module.channelInfo.each { channel ->
+                        def channelId = channel.channelId + 1
+                        def deviceNetworkId = buildDeviceNetworkId(module.networkId, module.moduleId, channelId)
+                        def deviceName = "${module.roomName} ${module.deviceName}".trim().tokenize().collect { it.capitalize() }.join(' ')
+                        if( channel.dimEnabled ){
+                            paragraph "Adding dimming switch [${deviceNetworkId}] with device name [${deviceName}]"
+                            childDevice = addChildDevice("UPBeat", "UPB Dimming Switch" , deviceNetworkId, [name: deviceName, label: deviceName])
+                            childDevice.updateNetworkId(module.networkId)
+                            childDevice.updateDeviceId(module.moduleId)
+                            childDevice.updateChannelId(channelId)
+                        } else {
+                            paragraph "Adding non-dimming switch [${deviceNetworkId}] with device name [${deviceName}]"
+                            childDevice = addChildDevice("UPBeat", "UPB Non-Dimming Switch" , deviceNetworkId, [name: deviceName, label: deviceName])
+                            childDevice.updateNetworkId(module.networkId)
+                            childDevice.updateDeviceId(module.moduleId)
+                            childDevice.updateChannelId(channelId)
                         }
-                        def components = device.getReceiveComponents()
-                        device.updateDataValue("receiveComponents", JsonOutput.toJson(components))
+
+                        def device = getChildDevice(deviceNetworkId)
+                        if (device){
+                            // Populate receive components
+                            module.presetInfo.each { preset ->
+                                if ( preset.channelId == channel.channelId && preset.linkId != 255 && preset.presetDimLevel != 255)
+                                {
+                                    paragraph "Adding preset to [${deviceNetworkId}] with device name [${deviceName}] at slot ${preset.componentId}  ${preset.linkId}:${preset.presetDimLevel}"
+                                    device.updateReceiveComponentSlot(preset.componentId + 1, preset.linkId, preset.presetDimLevel)
+                                }
+                            }
+                            def components = device.getReceiveComponents()
+                            device.updateDataValue("receiveComponents", JsonOutput.toJson(components))
+                        }
                     }
                 }
+                paragraph "Import completed successfully"
+                app.removeSetting("upeFileData")
+            }
+
+        } catch(IllegalArgumentException e) {
+            section() {
+                paragraph "Import Error: ${e.message}"
             }
         }
     }
@@ -568,7 +576,7 @@ def setLogLevelGlobal() {
         logInfo("Setting log level [${device.name}] to ${LOG_LEVELS[logLevelGlobal.toInteger()]}")
         device.updateSetting("logLevel", [value: logLevelGlobal, type: "enum"])
     }
-    app.clearSetting("logLevelGlobal")
+    app.removeSetting("logLevelGlobal")
 }
 
 /***************************************************************************
