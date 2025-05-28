@@ -365,34 +365,37 @@ def mainPage() {
             input name: "enableConfig", type: "bool", title: "Enable Remote Configuration", defaultValue: false, submitOnChange: true
         }
         */
-        section("Bulk Device Actions"){
-            input "refreshAllDeviceStates", "button", title: "Refresh All Device States"
+        if (app.getInstallationState() == "COMPLETE") {
+            section("Bulk Device Actions"){
+                input "refreshAllDeviceStates", "button", title: "Refresh All Device States"
 
-            def logLevels = [:]
+                def logLevels = [:]
 
-            LOG_LEVELS.values().each { level ->
-                logLevels.putIfAbsent(level, 0)
+                LOG_LEVELS.values().each { level ->
+                    logLevels.putIfAbsent(level, 0)
+                }
+
+                def devices = app.getChildDevices()
+                devices.each { device ->
+                    logLevels[LOG_LEVELS[device.getSetting("logLevel").toInteger()]] += 1
+                }
+
+                def formattedLogLevels = logLevels.collect { level, count -> "- ${level}: ${count}"}.join("\n")
+                paragraph "Device count by log level:\n${formattedLogLevels}"
+
+                input name: "logLevelGlobal", type: "enum", options: LOG_LEVELS, title: "Global Log Level", description: "Select a log level for all devices", required: false, submitOnChange: true
+                if(logLevelGlobal){
+                    input "setLogLevelGlobal", "button", title: "Apply Log Level Globally"
+                }
             }
+            section("Device Management") {
 
-            def devices = app.getChildDevices()
-            devices.each { device ->
-                logLevels[LOG_LEVELS[device.getSetting("logLevel").toInteger()]] += 1
-            }
-
-            def formattedLogLevels = logLevels.collect { level, count -> "- ${level}: ${count}"}.join("\n")
-            paragraph "Device count by log level:\n${formattedLogLevels}"
-
-            input name: "logLevelGlobal", type: "enum", options: LOG_LEVELS, title: "Global Log Level", description: "Select a log level for all devices", required: false, submitOnChange: true
-            if(logLevelGlobal){
-                input "setLogLevelGlobal", "button", title: "Apply Log Level Globally"
-            }
-        }
-        section("Device Management") {
-            if (app.getInstallationState() == "COMPLETE") {
                 href(name: "manualAddHref", title: "Manually Add Device", page: "addDevicePage", description: "Add a device manually")
                 href(name: "manualAddHref", title: "Bulk Import", page: "bulkImportPage", description: "Import UPStart export file")
-            } else {
-                paragraph "Please save the app by clicking 'Done' before adding devices."
+            }
+        } else {
+            section(){
+                paragraph "Please finish the app installation by clicking 'Done'. You can manage the app once it's been installed."
             }
         }
         section("Troubleshooting") {
