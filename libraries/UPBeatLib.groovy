@@ -304,8 +304,9 @@ def processUpeFile(String userInput) {
         }
 
         if (data['systemInfo']['version'] && data['systemInfo']['version'] != UPE_FILE_VERSION) {
-            logDebug("UPE file version is %d must be %d", data['systemInfo']['version'], UPE_FILE_VERSION)
-            return data
+            error = sprintf("UPE file version is %d must be %d", data['systemInfo']['version'], UPE_FILE_VERSION)
+            logError(error)
+            throw new IllegalArgumentException(error)
         }
     }
     return data
