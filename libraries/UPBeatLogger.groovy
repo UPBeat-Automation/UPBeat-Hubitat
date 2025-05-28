@@ -16,7 +16,7 @@ library (
 )
 
 @Field static final Map LOG_LEVELS = [0:"Off", 1:"Error", 2:"Warn", 3:"Info", 4:"Debug", 5:"Trace"]
-@Field static final int LOG_DEFAULT_LEVEL = 0
+@Field static final int LOG_DEFAULT_LEVEL = 3
 
 String sprintf(String format, Object arg){
     if (arg instanceof Byte) {
