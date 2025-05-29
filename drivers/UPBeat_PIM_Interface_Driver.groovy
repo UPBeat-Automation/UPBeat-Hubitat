@@ -149,6 +149,8 @@ def socketStatus(message) {
         isCorrectParent()
         if (message.contains('error: Stream closed') || message.contains('error: Connection timed out') || message.contains("receive error: Connection reset")) {
             logError("Socket Status: %s", message)
+            setNetworkStatus("Disconnected")
+            setModuleStatus("Inactive")
             setDeviceStatus("error", message, true)
             logInfo("Attempting reconnect in %s seconds", reconnectInterval)
             runIn(reconnectInterval, reconnectSocket)
@@ -323,7 +325,7 @@ def closeSocket() {
         return true
     } catch (Exception e) {
         logWarn("Disconnect failed")
-        setNetworkStatus("Disconnect failed", e.getMessage())
+        setNetworkStatus("Disconnected", e.getMessage())
         setModuleStatus("Inactive", "Failed to disconnect from socket")
         setDeviceStatus("error", "Failed to disconnect from socket: ${e.getMessage()}", true)
         return false
