@@ -157,7 +157,7 @@ def bulkImportPage() {
 }
 
 def bulkImport() {
-    return dynamicPage(name: "bulkImport", title: "Device Import Results", nextPage: "mainPage") {
+    return dynamicPage(name: "bulkImport", title: "Device Import Results", install: false, uninstall: false, nextPage: "mainPage") {
         try {
             def data = processUpeFile(settings.upeFileData)
             section() {
@@ -563,7 +563,6 @@ def refreshAllDeviceStates() {
         if (device.typeName != "UPB Powerline Interface Module" && !device.typeName.contains("Scene")) {
             logInfo("Refreshing ${device.deviceNetworkId} [${device.name}]")
             device.refresh()
-            pauseExecution(1000)
         }
     }
 }
