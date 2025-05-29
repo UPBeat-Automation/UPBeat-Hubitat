@@ -170,7 +170,6 @@ def parse(hexMessage) {
         logDebug("Message Received: [${hexMessage}]")
 
         byte[] messageBytes = HexUtils.hexStringToByteArray(hexMessage)
-
         if (messageBytes.size() > 0 && messageBytes[messageBytes.length - 1] == EOM) {
             messageBytes = messageBytes[0..-2]
             logTrace("[%s]: %s (EOL Removed)", hexMessage, HexUtils.byteArrayToHexString(messageBytes))
@@ -206,8 +205,6 @@ def parse(hexMessage) {
                     setDeviceStatus("error", "PU data parsing failed: ${e.message}", true)
                     return
                 }
-            } else {
-                logTrace("[%s]: Data=%s", asciiMessage, HexUtils.byteArrayToHexString(messageData))
             }
         }
 
@@ -247,7 +244,31 @@ def parse(hexMessage) {
                     break
                 case 'PU':
                     logDebug("UPB report message")
-                    runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
+                    try {
+                        def packet = parsePacket(messageData)
+                        def packetNetworkId = packet.networkId
+                        def packetSourceId = packet.sourceId
+                        def packetDestinationId = packet.destinationId
+                        def packetMessageDataId = packet.messageDataId
+                        def packetMessageArgs = packet.messageArgs
+                        if (packetMessageDataId == UPB_DEVICE_STATE && responseEntry.semaphore.getQueueLength() > 0) {
+                            responseEntry.data = [
+                                    networkId: packetNetworkId,
+                                    sourceId: packetSourceId,
+                                    destinationId: packetDestinationId,
+                                    messageDataId: packetMessageDataId,
+                                    messageArgs: packetMessageArgs
+                            ]
+                            responseEntry.semaphore.release()
+                            logDebug("Stored UPB_DEVICE_STATE report: %s (thread waiting)", packetMessageArgs)
+                        } else if (packetMessageDataId == UPB_DEVICE_STATE) {
+                            logDebug("Received UPB_DEVICE_STATE report: %s, no thread waiting, not signaling", packetMessageArgs)
+                        }
+                        // Dispatch to processMessage for event handling
+                        runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
+                    } catch (IllegalArgumentException e) {
+                        logError("Failed to parse PU message: %s", e.message)
+                    }
                     break
                 default:
                     logError("Unknown message type: ${messageType}")
@@ -536,8 +557,6 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
 
     byte[] packet = buildPacket(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgument)
-
-    // Encode packet as ASCII hex
     def packetStream = new ByteArrayOutputStream()
     packetStream.write(packet)
     byte[] encodedPacket = HexUtils.byteArrayToHexString(packetStream.toByteArray()).getBytes()
@@ -572,7 +591,26 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
                         response = responseEntry.response
                         if (response == 'PK') {
                             logDebug("Transmission completed with ACK (PK)")
-                            result = [result: true, reason: "Success"]
+                            if (messageDataId == UPB_REPORT_STATE) {
+                                // Wait for UPB_DEVICE_STATE report
+                                responseEntry.semaphore.drainPermits()
+                                if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                                    if (responseEntry.data && responseEntry.data.networkId == networkId &&
+                                            responseEntry.data.sourceId == destinationId &&
+                                            responseEntry.data.messageDataId == UPB_DEVICE_STATE) {
+                                        logDebug("Received UPB_DEVICE_STATE report: %s", responseEntry.data.messageArgs)
+                                        result = [result: true, reason: "Success", data: responseEntry.data.messageArgs]
+                                    } else {
+                                        logError("No valid UPB_DEVICE_STATE report received")
+                                        result = [result: false, reason: "No valid UPB_DEVICE_STATE report"]
+                                    }
+                                } else {
+                                    logError("Timeout waiting for UPB_DEVICE_STATE report")
+                                    result = [result: false, reason: "Timeout waiting for UPB_DEVICE_STATE"]
+                                }
+                            } else {
+                                result = [result: true, reason: "Success"]
+                            }
                             break
                         } else if (response == 'PN') {
                             if (controlWord & ACKRQ_PULSE) {
@@ -586,11 +624,11 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
                         }
                     } else {
                         logError("Timeout waiting for PK/PN response")
-                        result = [result: false, reason: "Failed: Timeout waiting for ACK/NAK response"]
+                        result = [result: false, reason: "Timeout waiting for ACK/NAK response"]
                     }
                 } else if (response == 'PE') {
                     logError("PIM rejected UPB message (PE)")
-                    result = [result: false, reason: "Failed: PIM rejected message (PE)"]
+                    result = [result: false, reason: "PIM rejected message (PE)"]
                 } else if (response == 'PB' && retry++ < maxRetry) {
                     logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
                     pauseExecution(100)
@@ -600,13 +638,12 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
                 logWarn("Timeout waiting for initial PA response, retrying")
                 if (retry++ >= maxRetry) {
                     logError("UPB message transmission aborted: Maximum iterations reached")
-                    result = [result: false, reason: "Failed: Transmission aborted: Maximum iterations reached"]
+                    result = [result: false, reason: "Transmission aborted: Maximum iterations reached"]
                 }
                 pauseExecution(100)
             }
         }
     }
-
     return result
 }
 
