@@ -177,7 +177,6 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
     try {
         isCorrectParent()
         if (settings.networkId != networkId || settings.linkId != linkId) {
-            logWarn("Received Link Event for incorrect Network ID (${networkId} vs ${settings.networkId}) or Link ID (${linkId} vs ${settings.linkId})")
             return
         }
         boolean success = false
