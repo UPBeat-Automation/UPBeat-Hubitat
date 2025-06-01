@@ -18,9 +18,13 @@ metadata {
         capability "Switch"
         capability "SwitchLevel"
         capability "Refresh"
+        capability "Flash"
         command "setLevel", [
                 [name: "level", type: "NUMBER", description: "Set level (0-100)", constraints: ["MIN": 0, "MAX": 100]],
                 [name: "duration", type: "ENUM", description: "Set the fade rate", constraints: FADE_RATE_MAPPING.keySet()]
+        ]
+        command "flash", [
+                [name: "rate", type: "ENUM", description: "Set the blink rate", constraints: BLINK_RATE_MAPPING.keySet()]
         ]
         attribute "status", "enum", ["ok", "error"]
 
@@ -69,6 +73,26 @@ metadata {
         "30min": 14,// 30 minutes
         "1hr": 15,  // 1 hour
         "Default": 255 // Device programmed default
+]
+
+@Field static Map BLINK_RATE_MAPPING = [
+        ".25s": 15,   // 0.25s = 250 ms → 250 / 16.667 ≈ 14.999 ≈ 15
+        ".5s": 30,    // 0.5s = 500 ms → 500 / 16.667 ≈ 29.998 ≈ 30
+        ".75s": 45,   // 0.75s = 750 ms → 750 / 16.667 ≈ 44.997 ≈ 45
+        "1s": 60,     // 1s = 1000 ms → 1000 / 16.667 ≈ 59.996 ≈ 60
+        "1.25s": 75,  // 1.25s = 1250 ms → 1250 / 16.667 ≈ 74.995 ≈ 75
+        "1.5s": 90,   // 1.5s = 1500 ms → 1500 / 16.667 ≈ 89.994 ≈ 90
+        "1.75s": 105, // 1.75s = 1750 ms → 1750 / 16.667 ≈ 104.993 ≈ 105
+        "2s": 120,    // 2s = 2000 ms → 2000 / 16.667 ≈ 119.992 ≈ 120
+        "2.25s": 135, // 2.25s = 2250 ms → 2250 / 16.667 ≈ 134.991 ≈ 135
+        "2.5s": 150,  // 2.5s = 2500 ms → 2500 / 16.667 ≈ 149.990 ≈ 150
+        "2.75s": 165, // 2.75s = 2750 ms → 2750 / 16.667 ≈ 164.989 ≈ 165
+        "3s": 180,    // 3s = 3000 ms → 3000 / 16.667 ≈ 179.988 ≈ 180
+        "3.25s": 195, // 3.25s = 3250 ms → 3250 / 16.667 ≈ 194.987 ≈ 195
+        "3.5s": 210,  // 3.5s = 3500 ms → 3500 / 16.667 ≈ 209.986 ≈ 210
+        "3.75s": 225, // 3.75s = 3750 ms → 3750 / 16.667 ≈ 224.985 ≈ 225
+        "4s": 240,    // 4s = 4000 ms → 4000 / 16.667 ≈ 239.984 ≈ 240
+        "4.25s": 255  // 4.25s = 4250 ms → 4250 / 16.667 ≈ 254.983 ≈ 255
 ]
 
 /***************************************************************************
@@ -294,6 +318,26 @@ def setLevel(value, duration = null) {
     return result
 }
 
+def flash(rateToFlash){
+    logTrace("flash(rateToFlash=%s)", rateToFlash)
+
+    try {
+        isCorrectParent()
+    } catch (IllegalStateException e) {
+        log.error e.message
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+        return [result: false, reason: e.message]
+    }
+
+    def rate
+    if (rateToFlash != null && BLINK_RATE_MAPPING.containsKey(rateToFlash)) {
+        rate = BLINK_RATE_MAPPING[rateToFlash]
+    } else {
+        logWarn("Invalid rate '${rateToFlash}'")
+    }
+
+    def result = getParent().blink(settings.networkId.intValue(), settings.deviceId.intValue(), 0xFF, rate, settings.channelId.intValue())
+}
 /***************************************************************************
  * UPB Receive Component Handlers
  ***************************************************************************/
@@ -314,7 +358,7 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         if (component) {
             def level = component.level
             def slot = component.slot
-            switch(eventType){
+            switch(eventType) {
                 case "UPB_ACTIVATE_LINK":
                     if (level == 0) {
                         sendEvent(name: "switch", value: "off")
@@ -333,11 +377,9 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
                     return
                     break
             }
-            sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
             logDebug("No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration.")
-            sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         }
     } catch (IllegalStateException e) {
