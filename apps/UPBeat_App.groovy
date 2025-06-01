@@ -389,7 +389,6 @@ def mainPage() {
                 }
             }
             section("Device Management") {
-
                 href(name: "manualAddHref", title: "Manually Add Device", page: "addDevicePage", description: "Add a device manually")
                 href(name: "manualAddHref", title: "Bulk Import", page: "bulkImportPage", description: "Import UPStart export file")
             }
@@ -578,7 +577,6 @@ def setLogLevelGlobal() {
         logInfo("Setting log level [${device.name}] to ${LOG_LEVELS[logLevelGlobal.toInteger()]}")
         device.updateSetting("logLevel", [value: logLevelGlobal, type: "enum"])
     }
-    app.removeSetting("logLevelGlobal")
 }
 
 /***************************************************************************
@@ -765,6 +763,44 @@ def gotoLevel(Integer networkId, Integer deviceId, Integer sourceId, Integer lev
         logDebug("Goto level succeeded")
     } else {
         logError("Goto level failed: %s", result.reason)
+    }
+    return result
+}
+
+def blink(Integer networkId, Integer deviceId, Integer sourceId, Integer rate, Integer channel) {
+    logTrace("gotoLevel(networkId=0x%02X, deviceId=0x%02X, sourceId=0x%02X, rate=%d, channel=%d)",
+            networkId, deviceId, sourceId, rate, channel)
+
+    // Validate inputs
+    if (networkId < 0 || networkId > 255) {
+        logError("Network ID ${networkId} is out of range (0-255)")
+        return [result: false, reason: "Network ID must be 0-255"]
+    }
+    if (deviceId < 0 || deviceId > 255) {
+        logError("Device ID ${deviceId} is out of range (0-255)")
+        return [result: false, reason: "Device ID must be 0-255"]
+    }
+    if (sourceId < 0 || sourceId > 255) {
+        logError("Source ID ${sourceId} is out of range (0-255)")
+        return [result: false, reason: "Source ID must be 0-255"]
+    }
+    if (rate < 0 || rate > 255) {
+        logError("Rate ${rate} is out of range (0-255)")
+        return [result: false, reason: "Rate must be 0-255"]
+    }
+    if (channel < 0 || channel > 255) {
+        logError("Channel ${channel} is out of range (0-255)")
+        return [result: false, reason: "Channel must be 0-255"]
+    }
+
+    def controlWord = encodeControlWord(LNK_DIRECT, REPRQ_NONE, ACKRQ_PULSE, CNT_ONE, SEQ_ZERO)
+    logDebug("Setting level with controlWord=0x%04X", controlWord)
+    def result = pimDevice.transmitMessage(controlWord, (byte) networkId, (byte) deviceId, (byte) sourceId, UPB_BLINK, [(byte) rate, (byte) channel] as byte[])
+
+    if (result.result) {
+        logDebug("Blink succeeded")
+    } else {
+        logError("Blink failed: %s", result.reason)
     }
     return result
 }
