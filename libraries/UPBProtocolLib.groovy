@@ -247,6 +247,26 @@ static Map parsePacket(byte[] data) {
 }
 
 /**
+ * Parses a PIM register report (PR) payload into a JSON-compatible map.
+ * @param data The raw payload bytes (RRVV, where RR is the starting register and VV are the values).
+ * @return A map with parsed fields: [register: byte, values: byte[]].
+ * @throws IllegalArgumentException if the payload is invalid (null or empty).
+ */
+static Map parseRegisterReport(byte[] data) {
+    if (data == null || data.length < 1) {
+        throw new IllegalArgumentException("Invalid register report: ${data == null ? 'null' : 'empty'} payload")
+    }
+
+    byte register = data[0]
+    byte[] values = data.length > 1 ? data[1..-1] : new byte[0]
+
+    return [
+            register: register,
+            values: values
+    ]
+}
+
+/**
  * Gets the name of a Message Set ID (MSID).
  * @param msid The MSID value.
  * @return The human-readable name.
