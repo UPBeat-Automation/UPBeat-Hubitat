@@ -333,11 +333,9 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
                     return
                     break
             }
-            sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
             logDebug("No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration.")
-            sendEvent(name: "lastReceivedLinkId", value: linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         }
     } catch (IllegalStateException e) {
