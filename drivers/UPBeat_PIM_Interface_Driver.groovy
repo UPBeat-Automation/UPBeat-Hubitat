@@ -118,7 +118,7 @@ def initialize() {
         logInfo("reconnectInterval: %s", reconnectInterval)
         logInfo("logLevel: %s", LOG_LEVELS[logLevel.toInteger()])
         deviceMutexes.put(device.deviceNetworkId, new Object())
-        deviceResponses.put(device.deviceNetworkId, [response: 'None', semaphore: new Semaphore(0)])
+        deviceResponses.put(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
 
         closeSocket()
         if (!openSocket()) {
@@ -197,14 +197,14 @@ def parse(hexMessage) {
         byte[] messageData = new byte[0]
         if (messageBytes.size() > 2) {
             messageData = messageBytes[2..-1]
-            if (messageType == 'PU') {
+            if (messageType == 'PU' || messageType == 'PR') {
                 String messageDataString = new String(messageData)
                 try {
                     messageData = HexUtils.hexStringToByteArray(messageDataString)
-                    logTrace("[%s]: PU Data=%s", asciiMessage, HexUtils.byteArrayToHexString(messageData))
+                    logTrace("[%s]: ${messageType} Data=%s", asciiMessage, HexUtils.byteArrayToHexString(messageData))
                 } catch (Exception e) {
-                    logError("[%s]: Failed to parse PU data: ${e.message}")
-                    setDeviceStatus("error", "PU data parsing failed: ${e.message}", true)
+                    logError("[%s]: Failed to parse ${messageType} data: ${e.message}")
+                    setDeviceStatus("error", "${messageType} data parsing failed: ${e.message}", true)
                     return
                 }
             }
@@ -214,35 +214,39 @@ def parse(hexMessage) {
         synchronized (responseEntry) {
             switch (messageType) {
                 case 'PA':
-                    responseEntry.response = 'PA'
                     logDebug("PIM accept message (PA)")
+                    responseEntry.response = 'PA'
                     responseEntry.semaphore.release()
                     break
                 case 'PE':
-                    responseEntry.response = 'PE'
                     logError("PIM error message (PE)")
+                    responseEntry.response = 'PE'
                     responseEntry.semaphore.release()
                     break
                 case 'PB':
-                    responseEntry.response = 'PB'
                     logWarn("PIM busy message (PB)")
+                    responseEntry.response = 'PB'
                     responseEntry.semaphore.release()
                     break
                 case 'PK':
-                    responseEntry.response = 'PK'
                     logDebug("PIM ACK response (PK)")
+                    responseEntry.response = 'PK'
                     responseEntry.semaphore.release()
                     break
                 case 'PN':
-                    responseEntry.response = 'PN'
                     logDebug("PIM NAK response (PN)")
+                    responseEntry.response = 'PN'
                     responseEntry.semaphore.release()
                     break
                 case 'PR':
-                    responseEntry.response = 'PR'
-                    responseEntry.data = messageData
-                    logDebug("PIM register report message")
-                    responseEntry.semaphore.release()
+                    logDebug("PIM register report message: %s", messageData)
+                    try {
+                        responseEntry.response = 'PR'
+                        responseEntry.data = parseRegisterReport(messageData)
+                        responseEntry.semaphore.release()
+                    } catch (IllegalArgumentException e) {
+                        logError("Failed to parse PR message: %s", e.message)
+                    }
                     break
                 case 'PU':
                     logDebug("UPB report message")
@@ -254,6 +258,7 @@ def parse(hexMessage) {
                         def packetMessageDataId = packet.messageDataId
                         def packetMessageArgs = packet.messageArgs
                         if (packetMessageDataId == UPB_DEVICE_STATE && responseEntry.semaphore.getQueueLength() > 0) {
+                            responseEntry.response = 'PU'
                             responseEntry.data = [
                                     networkId: packetNetworkId,
                                     sourceId: packetSourceId,
@@ -261,8 +266,8 @@ def parse(hexMessage) {
                                     messageDataId: packetMessageDataId,
                                     messageArgs: packetMessageArgs
                             ]
-                            responseEntry.semaphore.release()
                             logDebug("Stored UPB_DEVICE_STATE report: %s (thread waiting)", packetMessageArgs)
+                            responseEntry.semaphore.release()
                         } else if (packetMessageDataId == UPB_DEVICE_STATE) {
                             logDebug("Received UPB_DEVICE_STATE report: %s, no thread waiting, not signaling", packetMessageArgs)
                         }
@@ -403,19 +408,18 @@ def setPIMCommandMode() {
 
 def readPimRegister(byte register, int numRegisters) {
     logTrace("readPimRegister(register=0x%02X, numRegisters=%d)", register, numRegisters)
+
     if (numRegisters < 1 || numRegisters > 16) {
         logError("Invalid number of registers: %d (must be 1-16)", numRegisters)
-        return 'Failed'
+        return [result: false, reason: "Invalid number of registers: ${numRegisters} (must be 1-16)"]
     }
 
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
 
-    // Build packet: [register, numRegisters]
     def packet = new ByteArrayOutputStream()
     packet.write([register, numRegisters] as byte[])
-    byte sum = checksum(packet.toByteArray())
-    packet.write(sum)
+    packet.write(checksum(packet.toByteArray()))
     byte[] encodedPacket = HexUtils.byteArrayToHexString(packet.toByteArray()).getBytes()
     logDebug("Encoded PIM read packet: %s", new String(encodedPacket))
 
@@ -427,78 +431,59 @@ def readPimRegister(byte register, int numRegisters) {
 
     synchronized (deviceMutexes.get(device.deviceNetworkId)) {
         def retry = 0
-        def maxIterations = maxRetry + 10
-        def iteration = 0
-        def finalResult = 'Failed'
-        def resultData = null
-
-        while (iteration++ < maxIterations) {
+        def maxIterations = maxRetry
+        while (retry++ < maxIterations) {
             def responseEntry = deviceResponses.get(device.deviceNetworkId)
             responseEntry.response = 'None'
             responseEntry.data = null
             responseEntry.semaphore.drainPermits()
             sendBytes(bytes)
-            logDebug("Read register message sent to PIM: %s (register=0x%02X, numRegisters=%d)", new String(encodedPacket), register, numRegisters)
+            logDebug("Read register message sent: %s (register=0x%02X, numRegisters=%d)", new String(encodedPacket), register, numRegisters)
 
             if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
                 def response = responseEntry.response
-                if (response == 'PA') {
-                    logDebug("PIM accepted read register message (PA)")
-                    responseEntry.semaphore.drainPermits()
-                    if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
-                        response = responseEntry.response
-                        if (response == 'PR') {
-                            if (responseEntry.data?.length >= 2 + numRegisters) {
-                                // PR response: PRRRVV, skip RR (2 bytes)
-                                resultData = responseEntry.data[2..(1 + numRegisters)]
-                                logDebug("Received register report (PR) with data: %s", HexUtils.byteArrayToHexString(resultData))
-                                finalResult = 'Success'
-                            } else {
-                                logError("Invalid PR response data length: %d (expected >= %d)", responseEntry.data?.length ?: 0, 2 + numRegisters)
-                            }
-                            break
-                        }
-                    } else {
-                        logError("Timeout waiting for PR response")
+                if (response == 'PR' && responseEntry.data?.register != null && responseEntry.data?.values != null) {
+                    if (responseEntry.data.register == register && responseEntry.data.values.length == numRegisters) {
+                        logDebug("Received register report (PR) with register=0x%02X, values=%s",
+                                responseEntry.data.register, responseEntry.data.values)
+                        return [result: true, reason: "Success", data: responseEntry.data]
                     }
+                    logError("PR response invalid: register=0x%02X (expected 0x%02X), values.length=%d (expected %d)",
+                            responseEntry.data.register, register, responseEntry.data.values.length, numRegisters)
+                    return [result: false, reason: "PR response register or values mismatch"]
                 } else if (response == 'PE') {
                     logError("PIM rejected read register message (PE)")
-                    break
-                } else if (response == 'PB' && retry++ < maxRetry) {
-                    logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
+                    return [result: false, reason: "PIM rejected message (PE)"]
+                } else if (response == 'PB') {
+                    logWarn("PIM busy (PB), retrying (%d/%d)", retry, maxRetry)
                     pauseExecution(100)
                     continue
                 }
-            } else {
-                logWarn("Timeout waiting for initial PA response, retrying")
-                if (retry++ >= maxRetry) break
-                pauseExecution(100)
+                logError("Unexpected or invalid response: %s", response)
+                return [result: false, reason: "Unexpected or invalid response: ${response}"]
             }
+            logWarn("Timeout waiting for response, retrying")
         }
-
-        if (iteration >= maxIterations) {
-            logError("Read register aborted: Maximum iterations reached")
-        }
-        return finalResult == 'Success' ? [result: finalResult, data: resultData] : finalResult
+        logError("Read register 0x%02X aborted: Maximum retries reached", register)
+        return [result: false, reason: "Maximum retries reached"]
     }
 }
 
 def writePimRegister(byte register, byte[] values) {
-    logTrace("writePimRegister(register=0x%02X, values=%s)", register, HexUtils.byteArrayToHexString(values))
+    logTrace("writePimRegister(register=%s, values=%s)", register, values)
+
     if (values.length < 1 || values.length > 16) {
         logError("Invalid number of values: %d (must be 1-16)", values.length)
-        return false
+        return [result: false, reason: "Invalid number of values: ${values.length} (must be 1-16)"]
     }
 
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     deviceResponses.putIfAbsent(device.deviceNetworkId, [response: 'None', data: null, semaphore: new Semaphore(0)])
 
-    // Build packet: [register, values...]
     def packet = new ByteArrayOutputStream()
     packet.write(register)
     packet.write(values)
-    byte sum = checksum(packet.toByteArray())
-    packet.write(sum)
+    packet.write(checksum(packet.toByteArray()))
     byte[] encodedPacket = HexUtils.byteArrayToHexString(packet.toByteArray()).getBytes()
     logDebug("Encoded PIM write packet: %s", new String(encodedPacket))
 
@@ -510,43 +495,35 @@ def writePimRegister(byte register, byte[] values) {
 
     synchronized (deviceMutexes.get(device.deviceNetworkId)) {
         def retry = 0
-        def maxIterations = maxRetry + 10
-        def iteration = 0
-        def finalResult = false
-
-        while (iteration++ < maxIterations) {
+        def maxIterations = maxRetry
+        while (retry++ < maxIterations) {
             def responseEntry = deviceResponses.get(device.deviceNetworkId)
             responseEntry.response = 'None'
             responseEntry.data = null
             responseEntry.semaphore.drainPermits()
             sendBytes(bytes)
-            logDebug("Write register message sent to PIM: %s (register=0x%02X, values=%s)", new String(encodedPacket), register, values)
+            logDebug("Write register message sent: %s (register=0x%02X, values=%s)", new String(encodedPacket), register, values)
 
             if (responseEntry.semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
                 def response = responseEntry.response
                 if (response == 'PA') {
                     logDebug("PIM accepted write register message (PA)")
-                    finalResult = true
-                    break
+                    return [result: true, reason: "Success"]
                 } else if (response == 'PE') {
                     logError("PIM rejected write register message (PE)")
-                    break
-                } else if (response == 'PB' && retry++ < maxRetry) {
-                    logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
+                    return [result: false, reason: "PIM rejected message (PE)"]
+                } else if (response == 'PB') {
+                    logWarn("PIM busy (PB), retrying (%d/%d)", retry, maxRetry)
                     pauseExecution(100)
                     continue
                 }
-            } else {
-                logWarn("Timeout waiting for PA response, retrying")
-                if (retry++ >= maxRetry) break
-                pauseExecution(100)
+                logError("Unexpected response: %s", response)
+                return [result: false, reason: "Unexpected response: ${response}"]
             }
+            logWarn("Timeout waiting for response, retrying")
         }
-
-        if (iteration >= maxIterations) {
-            logError("Write register aborted: Maximum iterations reached")
-        }
-        return finalResult
+        logError("Write register 0x%02X aborted: Maximum retries reached", register)
+        return [result: false, reason: "Maximum retries reached"]
     }
 }
 
@@ -573,7 +550,7 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
     Map result = [result: false, reason: "Unknown failure"]
     synchronized (deviceMutexes.get(device.deviceNetworkId)) {
         def retry = 0
-        def maxIterations = maxRetry + 10
+        def maxIterations = maxRetry
         def iteration = 0
 
         while (iteration++ < maxIterations) {
