@@ -1,10 +1,10 @@
 /*
-* Hubitat Driver: UPB Non-Dimming Switch
-* Description: Universal Powerline Bus Non-Dimming Switch Driver
-* Copyright: 2025 UPBeat Automation
-* Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
-* Author: UPBeat Automation
-*/
+ * Hubitat Driver: UPB Non-Dimming Switch
+ * Description: Universal Powerline Bus Non-Dimming Switch Driver
+ * Copyright: 2025 UPBeat Automation
+ * Licensed: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+ * Author: UPBeat Automation
+ */
 #include UPBeat.UPBeatLogger
 #include UPBeat.UPBeatLib
 #include UPBeat.UPBeatDriverLib
@@ -46,212 +46,241 @@ metadata {
  * Core Driver Functions
  ***************************************************************************/
 void installed() {
-    logTrace("installed()")
+    logTrace("[${device.deviceNetworkId}] installed: Entering.")
     try {
         isCorrectParent()
-        logDebug("Installing UPB Non-Dimming Switch")
-        // Initialize state.receiveComponents to ensure it's not null
+        logInfo("[${device.deviceNetworkId}] installed: Installing UPB Non-Dimming Switch.")
         device.updateDataValue("receiveComponents", JsonOutput.toJson([:]))
         sendEvent(name: "status", value: "ok", isStateChange: false)
+        logInfo("[${device.deviceNetworkId}] installed: Driver installed successfully.")
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] installed: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] installed: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] installed: Exiting.")
 }
 
 def updated() {
-    logTrace("updated()")
+    logTrace("[${device.deviceNetworkId}] updated: Entering.")
     try {
         isCorrectParent()
+        logDebug("[${device.deviceNetworkId}] updated: Validating settings: networkId=%d, deviceId=%d, channelId=%d.",
+                settings.networkId, settings.deviceId, settings.channelId)
 
-        // Update parent device settings this will updated the device ID
         def result = parent.updateDeviceSettings(device, settings)
         if (result.success) {
+            logInfo("[${device.deviceNetworkId}] updated: Device settings updated successfully.")
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logError("Failed to update device: ${result.error}")
+            logError("[${device.deviceNetworkId}] updated: Failed to update device settings: %s.", result.error)
             sendEvent(name: "status", value: "error", descriptionText: result.error, isStateChange: true)
             return
         }
 
-        // Get validated receiveComponents
         def components = getReceiveComponents()
-
+        logDebug("[${device.deviceNetworkId}] updated: Parsed receive components: %s.", components)
         device.updateDataValue("receiveComponents", JsonOutput.toJson(components))
 
-        // Clear state
         state.clear()
+        logInfo("[${device.deviceNetworkId}] updated: Cleared state.")
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] updated: Illegal state: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     } catch (Exception e) {
-        logWarn("Failed to update: ${e.message}")
+        logWarn("[${device.deviceNetworkId}] updated: Failed to update: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] updated: Exiting.")
 }
 
 /***************************************************************************
  * Handlers for Driver Data
  ***************************************************************************/
 def updateNetworkId(Long networkId) {
-    logTrace("updateNetworkId(${networkId})")
+    logTrace("[${device.deviceNetworkId}] updateNetworkId: Entering with networkId=%d.", networkId)
     try {
         isCorrectParent()
+        logInfo("[${device.deviceNetworkId}] updateNetworkId: Updating network ID to %d.", networkId)
         device.updateSetting("networkId", [type: "number", value: networkId])
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] updateNetworkId: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] updateNetworkId: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] updateNetworkId: Exiting.")
 }
 
 def updateDeviceId(Long deviceId) {
-    logTrace("updateDeviceId(${deviceId})")
+    logTrace("[${device.deviceNetworkId}] updateDeviceId: Entering with deviceId=%d.", deviceId)
     try {
         isCorrectParent()
+        logInfo("[${device.deviceNetworkId}] updateDeviceId: Updating device ID to %d.", deviceId)
         device.updateSetting("deviceId", [type: "number", value: deviceId])
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] updateDeviceId: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] updateDeviceId: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] updateDeviceId: Exiting.")
 }
 
 def updateChannelId(Long channelId) {
-    logTrace("updateChannelId(${channelId})")
+    logTrace("[${device.deviceNetworkId}] updateChannelId: Entering with channelId=%d.", channelId)
     try {
         isCorrectParent()
+        logInfo("[${device.deviceNetworkId}] updateChannelId: Updating channel ID to %d.", channelId)
         device.updateSetting("channelId", [type: "number", value: channelId])
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] updateChannelId: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] updateChannelId: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] updateChannelId: Exiting.")
 }
 
 def updateReceiveComponentSlot(int slot, int linkId, int level) {
-    logTrace("updateReceiveComponentSlot(${slot})")
+    logTrace("[${device.deviceNetworkId}] updateReceiveComponentSlot: Entering with slot=%d, linkId=%d, level=%d.", slot, linkId, level)
     try {
         isCorrectParent()
+        logInfo("[${device.deviceNetworkId}] updateReceiveComponentSlot: Updating slot %d to linkId=%d, level=%d.", slot, linkId, level)
         device.updateSetting("receiveComponent${slot}", [type: "string", value: "${linkId}:${level}"])
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] updateReceiveComponentSlot: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] updateReceiveComponentSlot: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] updateReceiveComponentSlot: Exiting.")
 }
 
 /***************************************************************************
  * Handlers for Driver Capabilities
  ***************************************************************************/
 def refresh() {
-    logTrace("refresh()")
+    logTrace("[${device.deviceNetworkId}] refresh: Entering.")
     try {
         isCorrectParent()
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] refresh: Illegal state: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
         return [result: false, reason: e.message]
     }
 
-    // Validate inputs
     if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        logError("[${device.deviceNetworkId}] refresh: Invalid network ID: %d (must be 0-255).", settings.networkId)
         sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
         return [result: false, reason: "Network ID must be 0-255"]
     }
     if (!settings.deviceId || settings.deviceId < 1 || settings.deviceId > 250) {
-        logError("Device ID ${settings.deviceId} is invalid or out of range (1-250)")
+        logError("[${device.deviceNetworkId}] refresh: Invalid device ID: %d (must be 1-250).", settings.deviceId)
         sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 1-250", isStateChange: true)
         return [result: false, reason: "Device ID must be 1-250"]
     }
 
+    logDebug("[${device.deviceNetworkId}] refresh: Requesting device state for networkId=0x%02X, deviceId=0x%02X.", settings.networkId, settings.deviceId)
     def result = getParent().requestDeviceState(settings.networkId.intValue(), settings.deviceId.intValue(), 0)
     if (result.result) {
-        logDebug("Device state request succeeded")
+        logInfo("[${device.deviceNetworkId}] refresh: Device state request succeeded.")
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } else {
-        logError("Device state request failed: %s", result.reason)
+        logError("[${device.deviceNetworkId}] refresh: Device state request failed: %s.", result.reason)
         sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] refresh: Exiting with result=%s.", result)
     return result
 }
 
 def on() {
-    logTrace("on()")
+    logTrace("[${device.deviceNetworkId}] on: Entering.")
     try {
         isCorrectParent()
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] on: Illegal state: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
         return [result: false, reason: e.message]
     }
 
-    // Validate inputs
     if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        logError("[${device.deviceNetworkId}] on: Invalid network ID: %d (must be 0-255).", settings.networkId)
         sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
         return [result: false, reason: "Network ID must be 0-255"]
     }
     if (!settings.deviceId || settings.deviceId < 1 || settings.deviceId > 250) {
-        logError("Device ID ${settings.deviceId} is invalid or out of range (1-250)")
+        logError("[${device.deviceNetworkId}] on: Invalid device ID: %d (must be 1-250).", settings.deviceId)
         sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 1-250", isStateChange: true)
         return [result: false, reason: "Device ID must be 1-250"]
     }
     if (!settings.channelId || settings.channelId < 1 || settings.channelId > 255) {
-        logError("Channel ID ${settings.channelId} is invalid or out of range (1-255)")
+        logError("[${device.deviceNetworkId}] on: Invalid channel ID: %d (must be 1-255).", settings.channelId)
         sendEvent(name: "status", value: "error", descriptionText: "Channel ID must be 1-255", isStateChange: true)
         return [result: false, reason: "Channel ID must be 1-255"]
     }
 
+    logDebug("[${device.deviceNetworkId}] on: Sending ON to networkId=0x%02X, deviceId=0x%02X, channelId=0x%02X.", settings.networkId, settings.deviceId, settings.channelId)
     def result = getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 100, 0, settings.channelId.intValue())
     if (result.result) {
-        logDebug("On command succeeded")
+        logInfo("[${device.deviceNetworkId}] on: Command succeeded: switch=on.")
         sendEvent(name: "switch", value: "on", isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } else {
-        logError("On command failed: %s", result.reason)
+        logError("[${device.deviceNetworkId}] on: Command failed: %s.", result.reason)
         sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] on: Exiting with result=%s.", result)
     return result
 }
 
 def off() {
-    logTrace("off()")
+    logTrace("[${device.deviceNetworkId}] off: Entering.")
     try {
         isCorrectParent()
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] off: Illegal state: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
         return [result: false, reason: e.message]
     }
 
-    // Validate inputs
     if (!settings.networkId || settings.networkId < 0 || settings.networkId > 255) {
-        logError("Network ID ${settings.networkId} is invalid or out of range (0-255)")
+        logError("[${device.deviceNetworkId}] off: Invalid network ID: %d (must be 0-255).", settings.networkId)
         sendEvent(name: "status", value: "error", descriptionText: "Network ID must be 0-255", isStateChange: true)
         return [result: false, reason: "Network ID must be 0-255"]
     }
     if (!settings.deviceId || settings.deviceId < 1 || settings.deviceId > 250) {
-        logError("Device ID ${settings.deviceId} is invalid or out of range (1-250)")
+        logError("[${device.deviceNetworkId}] off: Invalid device ID: %d (must be 1-250).", settings.deviceId)
         sendEvent(name: "status", value: "error", descriptionText: "Device ID must be 1-250", isStateChange: true)
         return [result: false, reason: "Device ID must be 1-250"]
     }
     if (!settings.channelId || settings.channelId < 1 || settings.channelId > 255) {
-        logError("Channel ID ${settings.channelId} is invalid or out of range (1-255)")
+        logError("[${device.deviceNetworkId}] off: Invalid channel ID: %d (must be 1-255).", settings.channelId)
         sendEvent(name: "status", value: "error", descriptionText: "Channel ID must be 1-255", isStateChange: true)
         return [result: false, reason: "Channel ID must be 1-255"]
     }
 
+    logDebug("[${device.deviceNetworkId}] off: Sending OFF to networkId=0x%02X, deviceId=0x%02X, channelId=0x%02X.", settings.networkId, settings.deviceId, settings.channelId)
     def result = getParent().gotoLevel(settings.networkId.intValue(), settings.deviceId.intValue(), 0, 0, 0, settings.channelId.intValue())
     if (result.result) {
-        logDebug("Off command succeeded")
+        logInfo("[${device.deviceNetworkId}] off: Command succeeded: switch=off.")
         sendEvent(name: "switch", value: "off", isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } else {
-        logError("Off command failed: %s", result.reason)
+        logError("[${device.deviceNetworkId}] off: Command failed: %s.", result.reason)
         sendEvent(name: "status", value: "error", descriptionText: result.reason, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] off: Exiting with result=%s.", result)
     return result
 }
 
@@ -259,73 +288,88 @@ def off() {
  * UPB Receive Handlers
  ***************************************************************************/
 def handleLinkEvent(String eventSource, String eventType, int networkId, int sourceId, int linkId) {
-    logTrace("handleLinkEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, linkId=${linkId})")
+    logTrace("[${device.deviceNetworkId}] handleLinkEvent: Entering with eventSource=%s, eventType=%s, networkId=0x%02X, sourceId=0x%02X, linkId=%d.",
+            eventSource, eventType, networkId, sourceId, linkId)
     try {
         isCorrectParent()
-        // Retrieve and deserialize the receiveComponents map from data
         def receiveComponents = [:]
         def jsonData = device.getDataValue("receiveComponents")
         if (jsonData) {
+            logTrace("[${device.deviceNetworkId}] handleLinkEvent: Parsing receive components: %s.", jsonData)
             receiveComponents = new JsonSlurper().parseText(jsonData)
         }
 
-        // Use the linkId as the key (no padding)
         def linkIdKey = linkId.toString()
         def component = receiveComponents?.get(linkIdKey)
         if (component) {
             def level = component.level
             def slot = component.slot
-            switch(eventType){
+            logDebug("[${device.deviceNetworkId}] handleLinkEvent: Found component for linkId=%d: level=%d, slot=%d.", linkId, level, slot)
+            switch (eventType) {
                 case "UPB_ACTIVATE_LINK":
-                    sendEvent(name: "switch", value: (level == 0) ? "off" : "on")
+                    logInfo("[${device.deviceNetworkId}] handleLinkEvent: Processing UPB_ACTIVATE_LINK, setting switch=%s.", level == 0 ? "off" : "on")
+                    sendEvent(name: "switch", value: level == 0 ? "off" : "on", isStateChange: true)
                     break
                 case "UPB_DEACTIVATE_LINK":
-                    sendEvent(name: "switch", value: "off")
+                    logInfo("[${device.deviceNetworkId}] handleLinkEvent: Processing UPB_DEACTIVATE_LINK, setting switch=off.")
+                    sendEvent(name: "switch", value: "off", isStateChange: true)
                     break
                 default:
-                    sendEvent(name: "status", value: "error", descriptionText: "Unknown event type eventType=${eventType}", isStateChange: true)
+                    logError("[${device.deviceNetworkId}] handleLinkEvent: Unknown event type: %s.", eventType)
+                    sendEvent(name: "status", value: "error", descriptionText: "Unknown event type: ${eventType}", isStateChange: true)
                     return
-                    break
             }
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
-            logDebug("No action defined for Link ID ${linkId} on ${device.deviceNetworkId}. Check the receive link configuration.")
+            logDebug("[${device.deviceNetworkId}] handleLinkEvent: No action defined for linkId=%d.", linkId)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         }
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] handleLinkEvent: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] handleLinkEvent: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] handleLinkEvent: Exiting.")
 }
 
-def handleGotoEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int level, int rate, int channel)
-{
-    logTrace("handleGotoEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, level=${level}, rate=${rate}, channel=${channel})")
+def handleGotoEvent(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int level, int rate, int channel) {
+    logTrace("[${device.deviceNetworkId}] handleGotoEvent: Entering with eventSource=%s, eventType=%s, networkId=0x%02X, sourceId=0x%02X, destinationId=0x%02X, level=%d, rate=%d, channel=0x%02X.",
+            eventSource, eventType, networkId, sourceId, destinationId, level, rate, channel)
     try {
         isCorrectParent()
         def switchValue = (level == 0) ? "off" : "on"
-        logDebug("Updating switch to ${switchValue} for device [${settings.deviceId}]")
+        logInfo("[${device.deviceNetworkId}] handleGotoEvent: Updating switch=%s for deviceId=0x%02X.", switchValue, settings.deviceId)
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] handleGotoEvent: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] handleGotoEvent: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] handleGotoEvent: Exiting.")
 }
 
 def handleDeviceStateReport(String eventSource, String eventType, int networkId, int sourceId, int destinationId, int[] messageArgs) {
-    logTrace("handleDeviceEvent(eventSource=${eventSource}, eventType=${eventType}, networkId=${networkId}, sourceId=${sourceId}, destinationId=${destinationId}, args=${messageArgs})")
+    logTrace("[${device.deviceNetworkId}] handleDeviceStateReport: Entering with eventSource=%s, eventType=%s, networkId=0x%02X, sourceId=0x%02X, destinationId=0x%02X, args=%s.",
+            eventSource, eventType, networkId, sourceId, destinationId, messageArgs)
     try {
         isCorrectParent()
         int channel = settings.channelId.intValue() - 1
         int level = messageArgs.size() > channel ? Math.min(messageArgs[channel], 100) : 0
-
         def switchValue = (level == 0) ? "off" : "on"
-        logDebug("Updating switch to ${switchValue} for device [${settings.deviceId}]")
+        logInfo("[${device.deviceNetworkId}] handleDeviceStateReport: Updating switch=%s for deviceId=0x%02X.", switchValue, settings.deviceId)
         sendEvent(name: "switch", value: switchValue, isStateChange: true)
         sendEvent(name: "status", value: "ok", isStateChange: false)
     } catch (IllegalStateException e) {
-        log.error e.message
+        logError("[${device.deviceNetworkId}] handleDeviceStateReport: Illegal state: %s.", e.message)
+        sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
+    } catch (Exception e) {
+        logError("[${device.deviceNetworkId}] handleDeviceStateReport: Unexpected error: %s.", e.message)
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
+    logTrace("[${device.deviceNetworkId}] handleDeviceStateReport: Exiting.")
 }
