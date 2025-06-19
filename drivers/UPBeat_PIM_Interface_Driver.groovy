@@ -211,85 +211,91 @@ def parse(hexMessage) {
         }
 
         def outgoingMessage = currentOutgoing.get(device.deviceNetworkId)
-        synchronized (outgoingMessage) {
-            switch (messageType) {
-                case 'PA':
-                    logDebug("PIM accept message (PA)")
-                    if( outgoingMessage.containsKey('pim_response')) {
-                        logDebug("Outgoing message waiting on pim_response")
-                        outgoingMessage.pim_response = 'PA'
-                        outgoingMessage.pim_response_semaphore.release()
-                    }
-                    break
-                case 'PE':
-                    logError("PIM error message (PE)")
-                    if( outgoingMessage.containsKey('pim_response') ) {
-                        logDebug("Outgoing message waiting on pim_response")
-                        outgoingMessage.pim_response = 'PE'
-                        outgoingMessage.pim_response_semaphore.release()
-                    }
-                    break
-                case 'PB':
-                    logWarn("PIM busy message (PB)")
-                    if( outgoingMessage.containsKey('pim_response') ) {
-                        logDebug("Outgoing message waiting on pim_response")
-                        outgoingMessage.pim_response = 'PB'
-                        outgoingMessage.pim_response_semaphore.release()
-                    }
-                    break
-                case 'PK':
-                    logDebug("PIM ACK response (PK)")
-                    if( outgoingMessage.containsKey('pim_ack') ) {
-                        outgoingMessage.pim_ack = 'PK'
-                        outgoingMessage.pim_ack_semaphore.release()
-                    }
-                    break
-                case 'PN':
-                    logDebug("PIM NAK response (PN)")
-                    if( outgoingMessage.containsKey('pim_ack') ) {
-                        outgoingMessage.pim_ack = 'PN'
-                        outgoingMessage.pim_ack_semaphore.release()
-                    }
-                    break
-                case 'PR':
-                    logDebug("PIM register report message: %s", messageData)
-                    def register_data = null
-                    try {
-                        register_data = parseRegisterReport(messageData)
-                    } catch (IllegalArgumentException e) {
-                        logError("Failed to parse PR message: %s", e.message)
-                    }
+        switch (messageType) {
+            case 'PA':
+                logDebug("PIM accept message (PA)")
+                if (outgoingMessage.containsKey('pim_response')) {
+                    logDebug("Outgoing message waiting on pim_response")
+                    outgoingMessage.pim_response = 'PA'
+                    outgoingMessage.pim_response_semaphore.release()
+                }
+                break
+            case 'PE':
+                logError("PIM error message (PE)")
+                if (outgoingMessage.containsKey('pim_response')) {
+                    logDebug("Outgoing message waiting on pim_response")
+                    outgoingMessage.pim_response = 'PE'
+                    outgoingMessage.pim_response_semaphore.release()
+                }
+                break
+            case 'PB':
+                logWarn("PIM busy message (PB)")
+                if (outgoingMessage.containsKey('pim_response')) {
+                    logDebug("Outgoing message waiting on pim_response")
+                    outgoingMessage.pim_response = 'PB'
+                    outgoingMessage.pim_response_semaphore.release()
+                }
+                break
+            case 'PK':
+                logDebug("PIM ACK response (PK)")
+                if (outgoingMessage.containsKey('pim_ack')) {
+                    outgoingMessage.pim_ack = 'PK'
+                    outgoingMessage.pim_ack_semaphore.release()
+                }
+                break
+            case 'PN':
+                logDebug("PIM NAK response (PN)")
+                if (outgoingMessage.containsKey('pim_ack')) {
+                    outgoingMessage.pim_ack = 'PN'
+                    outgoingMessage.pim_ack_semaphore.release()
+                }
+                break
+            case 'PR':
+                logDebug("PIM register report message: %s", messageData)
+                def register_data = null
+                try {
+                    register_data = parseRegisterReport(messageData)
+                } catch (IllegalArgumentException e) {
+                    logError("Failed to parse PR message: %s", e.message)
+                }
 
-                    if( outgoingMessage.containsKey('pim_response') ) {
-                        logDebug("Outgoing message waiting on pim_response")
-                        outgoingMessage.pim_response = 'PR'
-                        outgoingMessage.pim_response_data = register_data
-                        outgoingMessage.pim_response_semaphore.release()
-                    }
-                    break
-                case 'PU':
-                    logDebug("UPB Message Report")
-                    def packet = null
-                    try {
-                        packet = parsePacket(messageData)
-                        runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
-                    } catch (IllegalArgumentException e) {
-                        logError("Failed to parse PU message: %s", e.message)
-                    }
+                if (outgoingMessage.containsKey('pim_response')) {
+                    logDebug("Outgoing message waiting on pim_response")
+                    outgoingMessage.pim_response = 'PR'
+                    outgoingMessage.pim_response_data = register_data
+                    outgoingMessage.pim_response_semaphore.release()
+                }
+                break
+            case 'PU':
+                logDebug("UPB Message Report")
+                def packet = null
+                try {
+                    packet = parsePacket(messageData)
+                    runIn(0, "asyncParseMessageReport", [data: [messageData: messageData]])
+                } catch (IllegalArgumentException e) {
+                    logError("parse Failed to parse PU message: %s", e.message)
+                }
 
-                    if( outgoingMessage.containsKey('response_data') ) {
-                        logDebug("Stored UPB_DEVICE_STATE report: %s (thread waiting)", packet.messageArgs)
+                if (outgoingMessage.containsKey('response_data')) {
+                    logDebug("Stored UPB_DEVICE_STATE report: %s (thread waiting)", packet.messageArgs)
+                    if( outgoingMessage.networkId == packet.networkId && outgoingMessage.destinationId == packet.sourceId)
+                    {
+                        logDebug("Found matching response NetworkId:0x%02X=0x%02X sourceId:0x%02X=0x%02X", outgoingMessage.networkId, packet.networkId, outgoingMessage.destinationId, packet.sourceId)
                         outgoingMessage.response_data = packet
                         outgoingMessage.response_data_semaphore.release()
-                    } else {
-                        logDebug("Received UPB_DEVICE_STATE report: %s, no thread waiting, not signaling", packet.messageArgs)
                     }
-                    break
-                default:
-                    logError("Unknown message type: ${messageType}")
-                    setDeviceStatus("error", "Message parsing failed: Unknown message type: ${messageType}", true)
-                    return
-            }
+                    else
+                    {
+                        logDebug("Not matching expected response NetworkId:0x%02X=0x%02X sourceId:0x%02X=0x%02X", outgoingMessage.networkId, packet.networkId, outgoingMessage.destinationId, packet.sourceId)
+                    }
+                } else {
+                    logDebug("Received UPB_DEVICE_STATE report: %s, no thread waiting, not signaling", packet.messageArgs)
+                }
+                break
+            default:
+                logError("Unknown message type: ${messageType}")
+                setDeviceStatus("error", "Message parsing failed: Unknown message type: ${messageType}", true)
+                return
         }
         setModuleStatus("Active")
         setDeviceStatus("ok")
@@ -596,26 +602,26 @@ def writePimRegister(byte register, byte[] values) {
 def transmitMessage(short controlWord, byte networkId, byte destinationId, byte sourceId, byte messageDataId, byte[] messageArgument) {
     logTrace("transmitMessage(controlWord=0x%04X, networkId=0x%02X, destinationId=0x%02X, sourceId=0x%02X, messageDataId=0x%02X, messageArgument=%s)",
             controlWord, networkId & 0xFF, destinationId & 0xFF, sourceId & 0xFF, messageDataId & 0xFF, messageArgument ? HexUtils.byteArrayToHexString(messageArgument) : "null")
-    logDebug("ACK flags: pulse=%s, msg=%s, id=%s", (controlWord & ACKRQ_PULSE) != 0, (controlWord & ACKRQ_MSG) != 0, (controlWord & ACKRQ_ID) != 0)
+    logDebug("ACK flags: pulse=${(controlWord & ACKRQ_PULSE) != 0}, msg=${(controlWord & ACKRQ_MSG) != 0}, id=${(controlWord & ACKRQ_ID) != 0}")
 
     deviceMutexes.putIfAbsent(device.deviceNetworkId, new Object())
     currentOutgoing.putIfAbsent(device.deviceNetworkId, [:])
 
     byte[] packet = buildPacket(controlWord, networkId, destinationId, sourceId, messageDataId, messageArgument)
-    def packetStream = new ByteArrayOutputStream()
-    packetStream.write(packet)
-    byte[] encodedPacket = HexUtils.byteArrayToHexString(packetStream.toByteArray()).getBytes()
-    logDebug("Encoded PIM transmit packet: %s", new String(encodedPacket))
+    byte[] encodedPacket = HexUtils.byteArrayToHexString(packet).getBytes()
+    logDebug("Encoded PIM write packet: %s", new String(encodedPacket))
 
     def message = new ByteArrayOutputStream()
     message.write(TRANSMIT_MESSAGE)
     message.write(encodedPacket)
     message.write(EOM)
-    byte[] bytes = message.toByteArray()
+    byte[] bytesToSend = message.toByteArray()
 
+    // Main gatekeeper lock to ensure one command transaction at a time.
     synchronized (deviceMutexes.get(device.deviceNetworkId)) {
         def expectsPU = (messageDataId == UPB_REPORT_STATE)
-        def expectsAck = (controlWord & ACKRQ_PULSE)
+        def expectsAck = (controlWord & ACKRQ_PULSE) != 0
+
         def outgoing = [
                 pim_response: null,
                 pim_response_semaphore: new Semaphore(0),
@@ -623,127 +629,127 @@ def transmitMessage(short controlWord, byte networkId, byte destinationId, byte 
                 pim_ack_semaphore: new Semaphore(0),
                 controlWord: controlWord
         ]
+
         if (expectsPU) {
             outgoing.response_data = null
             outgoing.response_data_semaphore = new Semaphore(0)
             outgoing.networkId = networkId
             outgoing.destinationId = destinationId
         }
-        Map result = [result: false, reason: "Unknown failure"]
-        def retry = 0
-        loop: while (true) {
-            // Reset for retry
-            outgoing.pim_response = null
-            outgoing.pim_ack = null
-            if (expectsPU) {
-                outgoing.response_data = null
-                outgoing.response_data_semaphore?.drainPermits()
-            }
-            outgoing.pim_response_semaphore.drainPermits()
-            outgoing.pim_ack_semaphore.drainPermits()
-            currentOutgoing.put(device.deviceNetworkId, outgoing)
 
-            // Send message
-            sendBytes(bytes)
-            logDebug("UPB message sent to PIM: %s", HexUtils.byteArrayToHexString(packet))
+        Map result = [result: false, reason: "Transaction failed after all retries."]
+        int retry = 0
 
-            // Wait for PA/PB/PE
-            if (outgoing.pim_response_semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+        try {
+            loop: while (retry < maxRetry) {
+                // Reset state for this attempt
+                outgoing.pim_response = null
+                outgoing.pim_ack = null
+                outgoing.pim_response_semaphore.drainPermits()
+                outgoing.pim_ack_semaphore.drainPermits()
+                if (expectsPU) {
+                    outgoing.response_data = null
+                    outgoing.response_data_semaphore?.drainPermits()
+                }
+                currentOutgoing.put(device.deviceNetworkId, outgoing)
+
+                // ==========================================================
+                // STAGE A: Send and Wait for PIM Acceptance (PA/PB/PE)
+                // ==========================================================
+                sendBytes(bytesToSend)
+                logDebug("UPB message sent to PIM (Attempt ${retry + 1}/${maxRetry})")
+
+                if (!outgoing.pim_response_semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                    logWarn("Timeout waiting for PA/PB/PE. Retrying...")
+                    retry++
+                    pauseExecution(100)
+                    continue loop
+                }
+
+                // Process the PIM's initial response
                 switch (outgoing.pim_response) {
                     case 'PA':
-                        logDebug("PIM accepted UPB message (PA)")
-                        if (outgoing.pim_ack_semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
-                            switch (outgoing.pim_ack) {
-                                case 'PK':
-                                    logDebug("Transmission completed with ACK (PK)")
-                                    if (!expectsAck) {
-                                        logError("Unexpected PK received, expected PN as ACKRQ_PULSE not set")
-                                        result = [result: false, reason: "Unexpected PK received"]
-                                        break loop
-                                    }
-                                    if (expectsPU) {
-                                        if (outgoing.response_data_semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
-                                            if (outgoing.response_data && outgoing.response_data.networkId == outgoing.networkId &&
-                                                    outgoing.response_data.sourceId == outgoing.destinationId &&
-                                                    outgoing.response_data.messageDataId == UPB_DEVICE_STATE) {
-                                                logDebug("Received UPB_DEVICE_STATE report: %s", outgoing.response_data.messageArgs)
-                                                result = [result: true, reason: "Success", data: outgoing.response_data.messageArgs]
-                                            } else {
-                                                logError("No valid UPB_DEVICE_STATE report received")
-                                                result = [result: false, reason: "No valid UPB_DEVICE_STATE report"]
-                                            }
-                                        } else {
-                                            logWarn("Timeout waiting for PU, retrying (%d/%d)", retry + 1, maxRetry)
-                                            break
-                                        }
-                                    } else {
-                                        result = [result: true, reason: "Success"]
-                                    }
-                                    break loop
-                                case 'PN':
-                                    logDebug("Transmission completed with NAK (PN)")
-                                    if (expectsAck) {
-                                        logError("Transmission completed with NAK (PN), ACK pulse expected")
-                                        result = [result: false, reason: "NoAck: Device did not acknowledge message (PN)"]
-                                        break loop
-                                    }
-                                    if (expectsPU) {
-                                        if (outgoing.response_data_semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
-                                            if (outgoing.response_data && outgoing.response_data.networkId == outgoing.networkId &&
-                                                    outgoing.response_data.sourceId == outgoing.destinationId &&
-                                                    outgoing.response_data.messageDataId == UPB_DEVICE_STATE) {
-                                                logDebug("Received UPB_DEVICE_STATE report: %s", outgoing.response_data.messageArgs)
-                                                result = [result: true, reason: "Success", data: outgoing.response_data.messageArgs]
-                                            } else {
-                                                logError("No valid UPB_DEVICE_STATE report received")
-                                                result = [result: false, reason: "No valid UPB_DEVICE_STATE report"]
-                                            }
-                                        } else {
-                                            logWarn("Timeout waiting for PU, retrying (%d/%d)", retry + 1, maxRetry)
-                                            break
-                                        }
-                                    } else {
-                                        result = [result: true, reason: "Success, no ACK pulse expected"]
-                                    }
-                                    break loop
-                                default:
-                                    logWarn("Invalid or no PK/PN response, retrying (%d/%d)", retry + 1, maxRetry)
-                                    break
-                            }
-                        } else {
-                            logWarn("Timeout waiting for PK/PN, retrying (%d/%d)", retry + 1, maxRetry)
-                            break
-                        }
-                        break
+                        logDebug("PIM accepted UPB message (PA).")
+                        break // Success, break from switch to proceed to next stage.
                     case 'PB':
-                        logWarn("PIM busy (PB), retrying (%d/%d)", retry + 1, maxRetry)
-                        break
+                        logWarn("PIM busy (PB). Retrying...")
+                        retry++
+                        pauseExecution(100)
+                        continue loop // Go to top of while loop for next attempt.
                     case 'PE':
-                        logError("PIM rejected UPB message (PE)")
+                        logError("PIM rejected UPB message (PE).")
                         result = [result: false, reason: "PIM rejected message (PE)"]
-                        break loop
+                        break loop // Terminal failure, abort transaction.
                     default:
-                        logWarn("Invalid or no PA/PB/PE response, retrying (%d/%d)", retry + 1, maxRetry)
-                        break
+                        logError("Invalid or unexpected PIM response: '${outgoing.pim_response}'.")
+                        result = [result: false, reason: "Invalid PIM response: ${outgoing.pim_response}"]
+                        break loop // Terminal failure, abort transaction.
                 }
-            } else {
-                logWarn("Timeout waiting for PA/PB/PE, retrying (%d/%d)", retry + 1, maxRetry)
-            }
 
-            // Check for max retries
-            if (++retry >= maxRetry) {
-                logError("UPB message transmission aborted: Maximum retries reached")
-                result = [result: false, reason: "Maximum retries reached"]
+                // ==========================================================
+                // STAGE B: Wait for Transmission Acknowledgment (PK/PN)
+                // ==========================================================
+                if (!outgoing.pim_ack_semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                    logError("Timeout waiting for PK/PN from remote UPB device.")
+                    result = [result: false, reason: "Timeout: No ACK/NAK from remote UPB device."]
+                    break loop
+                }
+
+                // Check for ACK/NAK mismatch errors
+                if (outgoing.pim_ack == 'PK' && !expectsAck) {
+                    logError("Unexpected PK received, but ACKRQ_PULSE was not set.")
+                    result = [result: false, reason: "Unexpected PK received"]
+                    break loop
+                }
+                if (outgoing.pim_ack == 'PN' && expectsAck) {
+                    logError("Transmission failed with NAK (PN), but an ACK pulse was expected.")
+                    result = [result: false, reason: "NoAck: Device did not acknowledge message (PN)"]
+                    break loop
+                }
+
+                logDebug("Transmission completed successfully with ${outgoing.pim_ack}.")
+
+                // ==========================================================
+                // STAGE C: Wait for Data Payload (if expected)
+                // ==========================================================
+                if (expectsPU) {
+                    if (!outgoing.response_data_semaphore.tryAcquire(maxProcessingTime, TimeUnit.MILLISECONDS)) {
+                        logError("Timeout waiting for data response (PU) from remote device.")
+                        result = [result: false, reason: "Timeout: No data response from remote UPB device."]
+                        break loop
+                    }
+
+                    def response = outgoing.response_data
+                    if (response && response.networkId == outgoing.networkId &&
+                            response.sourceId == outgoing.destinationId &&
+                            response.messageDataId == UPB_DEVICE_STATE) {
+
+                        logDebug("Received valid UPB_DEVICE_STATE report.")
+                        result = [result: true, reason: "Success", data: response.messageArgs]
+                    } else {
+                        logError("Received invalid or mismatched data response (PU). Full response: ${response}")
+                        result = [result: false, reason: "Invalid data response (PU)"]
+                    }
+                } else {
+                    // No data was expected, so the transaction is successful.
+                    result = [result: true, reason: "Success"]
+                }
+
+                // The entire transaction is complete. Exit the loop.
                 break loop
             }
 
-            // Apply delay for retries
-            pauseExecution(100)
+            // If the loop finishes due to max retries, update the reason.
+            if (!result.result && retry >= maxRetry) {
+                result.reason = "Transaction failed: Maximum retries reached."
+            }
+
+        } finally {
+            // Always clear the state map to prevent stale data from affecting the next command.
+            currentOutgoing.put(device.deviceNetworkId, [:])
+            logDebug("Transaction finished. Cleared outgoing state.")
         }
 
-        // Set current_outgoing to empty map
-        currentOutgoing.put(device.deviceNetworkId, [:])
-        logDebug("Set current_outgoing to empty map")
         return result
     }
 }
