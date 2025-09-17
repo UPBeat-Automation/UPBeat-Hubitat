@@ -168,7 +168,7 @@ def bulkImport() {
                     def deviceNetworkId = buildSceneNetworkId( data.systemInfo.networkId, link.linkId)
                     def sceneName = link.name.trim().tokenize().collect { it.capitalize() }.join(' ')
                     paragraph "Adding link device [${deviceNetworkId}] with scene name [${sceneName}]"
-                    childDevice = addChildDevice("UPBeat", "UPB Scene Actuator" , deviceNetworkId, [name: sceneName, label: sceneName])
+                    childDevice = addChildDevice("UPBeat", "UPB Scene Switch" , deviceNetworkId, [name: sceneName, label: sceneName])
                     childDevice.updateNetworkId(data.systemInfo.networkId)
                     childDevice.updateLinkId(link.linkId)
                 }
