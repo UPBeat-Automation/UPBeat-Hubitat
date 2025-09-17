@@ -7,6 +7,14 @@ Hubitat app, drivers, and libraries for Universal Powerline Bus (UPB) control. A
 
 Full setup and install instructions can be found [here](https://github.com/UPBeat-Automation)
 
+## Driver Notes
+
+The primary drivers needed for most UPB deployments are `UPB Scene Switch`, `UPB Dimming Switch`, and `UPB Non-Dimming Switch` but other experimental drivers exist.
+
+The virtual `UPB Multi-Speed Fan Driver`, `UPB Single-Speed Fan Driver` and `UPB Actuator Driver` work in hubitat but are not fully tested against Alexa, Google, and Apple home assistants. 
+
+This is a current area of testing and development. You can change the driver associated with the respective device types from the device info view.
+
 ## License
 This code is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-nc-sa/4.0/).  
 Copyright (c) 2025 UPBeat Automation.  
