@@ -19,6 +19,10 @@ preferences {
     input name: "logLevel", type: "enum", options: LOG_LEVELS, title: "Log Level", defaultValue: LOG_DEFAULT_LEVEL, required: true
     input name: "networkId", type: "number", title: "Network ID", description: "UPB Network ID (0-255)", required: true, range: "0..255"
     input name: "linkId", type: "number", title: "Link ID", description: "UPB Link ID (1-250)", required: true, range: "1..250"
+    input name: "forcedState", type: "enum", title: "Forced Switch State", description: "Choose how the driver reports switch state:<br>" +
+            "• Normal – Report actual scene activity<br>" +
+            "• Always on – Always show switch as ON<br>" +
+            "• Always off – Always show switch as OFF<br>", options: [ "normal": "Normal (typical switch behavior)", "off": "Always show as off", "on": "Always show as on" ] , defaultValue: "normal", required: true
 }
 
 /***************************************************************************
@@ -61,6 +65,8 @@ def updated() {
         def result = parent.updateDeviceSettings(device, settings)
         if (result.success) {
             logInfo("[${device.deviceNetworkId}] updated: Device settings updated successfully.")
+            // Since Scene's are not stateful, we will always set the state to off, unless an override exists.
+            sendEvent(name: "switch", value: effectiveSwitchState("off") , isStateChange: true)
             sendEvent(name: "status", value: "ok", isStateChange: false)
         } else {
             logError("[${device.deviceNetworkId}] updated: Failed to update device settings: %s.", result.error)
@@ -116,6 +122,14 @@ def updateLinkId(Long linkId) {
         sendEvent(name: "status", value: "error", descriptionText: e.message, isStateChange: true)
     }
     logTrace("[${device.deviceNetworkId}] updateLinkId: Exiting.")
+}
+
+def String effectiveSwitchState(String requested) {
+    switch (settings.forcedState ?: "normal") {
+        case "on":  return "on"
+        case "off": return "off"
+        default:    return requested
+    }
 }
 
 /***************************************************************************
@@ -214,12 +228,14 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         switch (eventType) {
             case "UPB_ACTIVATE_LINK":
                 logInfo("[${device.deviceNetworkId}] handleLinkEvent: Activating scene for linkId=%d.", settings.linkId)
-                sendEvent(name: "switch", value: "on", isStateChange: true)
+                sendEvent(name: "switch", value: "on" , isStateChange: true)
+                sendEvent(name: "switch", value: effectiveSwitchState("on") , isStateChange: false)
                 success = true
                 break
             case "UPB_DEACTIVATE_LINK":
                 logInfo("[${device.deviceNetworkId}] handleLinkEvent: Deactivating scene for linkId=%d.", settings.linkId)
-                sendEvent(name: "switch", value: "off", isStateChange: true)
+                sendEvent(name: "switch", value: "off" , isStateChange: true)
+                sendEvent(name: "switch", value: effectiveSwitchState("off") , isStateChange: false)
                 success = true
                 break
             default:
