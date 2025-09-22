@@ -227,14 +227,16 @@ def handleLinkEvent(String eventSource, String eventType, int networkId, int sou
         boolean success = false
         switch (eventType) {
             case "UPB_ACTIVATE_LINK":
-                logInfo("[${device.deviceNetworkId}] handleLinkEvent: Activating scene for linkId=%d.", settings.linkId)
+                logInfo("[${device.deviceNetworkId}] handleLinkEvent: Activating scene for linkId=%d. Effective state: %s", settings.linkId, effectiveSwitchState("on"))
                 sendEvent(name: "switch", value: "on" , isStateChange: true)
+                pauseExecution(50)
                 sendEvent(name: "switch", value: effectiveSwitchState("on") , isStateChange: false)
                 success = true
                 break
             case "UPB_DEACTIVATE_LINK":
-                logInfo("[${device.deviceNetworkId}] handleLinkEvent: Deactivating scene for linkId=%d.", settings.linkId)
+                logInfo("[${device.deviceNetworkId}] handleLinkEvent: Deactivating scene for linkId=%d. Effective state: %s", settings.linkId, effectiveSwitchState("on"))
                 sendEvent(name: "switch", value: "off" , isStateChange: true)
+                pauseExecution(50)
                 sendEvent(name: "switch", value: effectiveSwitchState("off") , isStateChange: false)
                 success = true
                 break
